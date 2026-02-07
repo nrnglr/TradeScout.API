@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -45,8 +46,16 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = issuer,
         ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-        ClockSkew = TimeSpan.Zero // Token süre toleransı yok
+        ClockSkew = TimeSpan.Zero, // Token süre toleransı yok
+        
+        // ÖNEMLİ: Claim type mapping'i kapat
+        // .NET Core claim type'ları otomatik dönüştürüyor, bunu engelleyelim
+        NameClaimType = ClaimTypes.Name,
+        RoleClaimType = ClaimTypes.Role
     };
+    
+    // Claim mapping'i tamamen kapat
+    options.MapInboundClaims = false;
 });
 
 builder.Services.AddAuthorization();
@@ -70,9 +79,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+// ===== PROXY CONFIGURATION =====
+// Configure Proxy Settings
+builder.Services.Configure<TradeScout.API.Models.ProxySettings>(
+    builder.Configuration.GetSection("ProxySettings"));
+
 // ===== SERVICE REGISTRATIONS =====
 // Register JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
+
+// Register Proxy Manager
+builder.Services.AddSingleton<ProxyManager>();
+
+// Register Scraper Services
+builder.Services.AddScoped<IGoogleMapsScraperService, GoogleMapsScraperService>();
+builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
 // ===== CONTROLLER CONFIGURATION =====
 builder.Services.AddControllers();
@@ -106,6 +127,22 @@ app.UseCors("AllowReactApp");
 // Authentication & Authorization middleware
 app.UseAuthentication();
 app.UseAuthorization();
+
+// ===== API ENDPOINTS =====
+// Root health check endpoint
+app.MapGet("/", () => new
+{
+    status = "ok",
+    message = "TradeScout API is running",
+    version = "1.0.0",
+    timestamp = DateTime.UtcNow,
+    endpoints = new
+    {
+        auth = "/api/auth",
+        scraper = "/api/scraper",
+        proxy = "/api/proxy"
+    }
+}).WithTags("Health").AllowAnonymous();
 
 app.MapControllers();
 

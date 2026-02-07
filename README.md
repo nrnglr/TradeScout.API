@@ -13,6 +13,7 @@ TradeScout SaaS platformu için geliştirilmiş profesyonel .NET 9 Web API. Bu p
 
 ## 📋 Özellikler
 
+- ✅ Health Check Endpoint (API Durum Kontrolü)
 - ✅ Kullanıcı Kaydı (Register)
 - ✅ Kullanıcı Girişi (Login)
 - ✅ JWT Token Üretimi
@@ -112,6 +113,31 @@ Uygulama varsayılan olarak şu adreste çalışacak:
 
 ## 📡 API Endpoints
 
+### Health Check
+
+#### GET / (Root Endpoint)
+API durumunu kontrol etmek için kullanılır.
+
+```http
+GET /
+```
+
+**Yanıt (200 OK):**
+```json
+{
+  "status": "ok",
+  "message": "TradeScout API is running",
+  "version": "1.0.0",
+  "timestamp": "2026-02-07T17:52:36.411581Z",
+  "endpoints": {
+    "auth": "/api/auth",
+    "scraper": "/api/scraper"
+  }
+}
+```
+
+Daha fazla bilgi için: [HEALTH_CHECK.md](HEALTH_CHECK.md)
+
 ### Authentication Endpoints
 
 #### 1. Register (Kayıt Ol)
@@ -159,6 +185,20 @@ Content-Type: application/json
   "credits": 5,
   "role": "User",
   "packageType": "Free"
+}
+```
+
+### Health Check Endpoint
+
+#### 1. API Durum Kontrolü
+```http
+GET /api/health
+```
+
+**Başarılı Yanıt (200 OK):**
+```json
+{
+  "status": "Healthy"
 }
 ```
 
@@ -339,7 +379,18 @@ export JwtSettings__SecretKey="your-super-secret-production-key"
 dotnet publish -c Release -o ./publish
 ```
 
-## 📞 İletişim ve Destek
+## � Additional Documentation
+
+For more detailed information, please refer to these documents:
+
+- **[API_REFERENCE.md](API_REFERENCE.md)** - Quick reference guide for all API endpoints
+- **[HEALTH_CHECK.md](HEALTH_CHECK.md)** - Health check endpoint documentation
+- **[SCRAPER_README.md](SCRAPER_README.md)** - Google Maps scraper implementation details
+- **[FRONTEND_KULLANIM.md](FRONTEND_KULLANIM.md)** - Frontend integration guide (React/Next.js)
+- **[KURULUM.md](KURULUM.md)** - Detailed installation instructions (Turkish)
+- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Overall project summary
+
+## �📞 İletişim ve Destek
 
 Sorularınız veya önerileriniz için:
 - Email: support@tradescout.com
