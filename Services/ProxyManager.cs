@@ -103,6 +103,20 @@ public class ProxyManager
         }
     }
 
+    public List<ProxyConfig> GetHealthyProxies()
+    {
+        lock (_lock)
+        {
+            if (!_settings.EnableProxy || !_settings.Proxies.Any())
+            {
+                _logger.LogInformation("Proxy disabled or no proxies configured");
+                return new List<ProxyConfig>();
+            }
+
+            return _settings.Proxies.Where(p => p.IsHealthy).ToList();
+        }
+    }
+
     public ChromeOptions ConfigureProxyForDriver(ChromeOptions options, ProxyConfig? proxyConfig)
     {
         if (proxyConfig == null)
@@ -159,15 +173,20 @@ public class ProxyManager
             _logger.LogInformation($"🧪 Testing proxy: {result.ProxyAddress}");
 
             // Create HttpClientHandler with proxy
+            var proxy = new System.Net.WebProxy(proxyConfig.Address)
+            {
+                Credentials = !string.IsNullOrEmpty(proxyConfig.Username) 
+                    ? new System.Net.NetworkCredential(proxyConfig.Username, proxyConfig.Password)
+                    : null,
+                BypassProxyOnLocal = false
+            };
+
             var handler = new HttpClientHandler
             {
-                Proxy = new System.Net.WebProxy(proxyConfig.Address)
-                {
-                    Credentials = !string.IsNullOrEmpty(proxyConfig.Username) 
-                        ? new System.Net.NetworkCredential(proxyConfig.Username, proxyConfig.Password)
-                        : null
-                },
-                UseProxy = true
+                Proxy = proxy,
+                UseProxy = true,
+                PreAuthenticate = true,
+                UseDefaultCredentials = false
             };
 
             using var httpClient = new HttpClient(handler)

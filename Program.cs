@@ -14,7 +14,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    options.UseNpgsql(connectionString);
+    options.EnableSensitiveDataLogging(); // ⚠️ Development only - shows parameter values
+    options.EnableDetailedErrors(); // Shows detailed error information
+});
 
 // ===== JWT AUTHENTICATION CONFIGURATION =====
 // Get JWT settings from configuration
@@ -61,16 +65,22 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // ===== CORS CONFIGURATION =====
-// Configure CORS to allow React frontend
+// Configure CORS to allow React frontend (Development + Production)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
         policy.WithOrigins(
+                // Development
                 "http://localhost:3000",      // React development
                 "http://localhost:5173",      // Vite development
                 "http://localhost:4200",      // Angular development
-                "http://localhost:3001"       // Alternatif React port
+                "http://localhost:3001",      // Alternatif React port
+                // Production
+                "https://fgstrade.com",       // Production HTTPS
+                "http://fgstrade.com",        // Production HTTP
+                "https://www.fgstrade.com",   // Production HTTPS with www
+                "http://www.fgstrade.com"     // Production HTTP with www
             )
             .AllowAnyMethod()
             .AllowAnyHeader()
@@ -91,8 +101,13 @@ builder.Services.AddScoped<IJwtService, JwtService>();
 // Register Proxy Manager
 builder.Services.AddSingleton<ProxyManager>();
 
+// Register HttpClient for Gemini AI
+builder.Services.AddHttpClient();
+
 // Register Scraper Services
 builder.Services.AddScoped<IGoogleMapsScraperService, GoogleMapsScraperService>();
+builder.Services.AddScoped<IParallelGoogleMapsScraperService, ParallelGoogleMapsScraperService>();
+builder.Services.AddScoped<IGeminiSearchService, GeminiSearchService>(); // ✨ Gemini AI Service
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
 // ===== CONTROLLER CONFIGURATION =====

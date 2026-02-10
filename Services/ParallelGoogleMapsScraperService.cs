@@ -2,26 +2,24 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using TradeScout.API.DTOs;
-using Bogus;
+using System.Collections.Concurrent;
 
 namespace TradeScout.API.Services;
 
 /// <summary>
-/// Google Maps scraper service with ban protection
+/// Parallel Google Maps scraper with multiple proxies for high-speed scraping
 /// </summary>
-public interface IGoogleMapsScraperService
+public interface IParallelGoogleMapsScraperService
 {
-    Task<List<BusinessDto>> ScrapeBusinessesAsync(string category, string city, string? country, string language, int maxResults, CancellationToken cancellationToken = default);
+    Task<List<BusinessDto>> ScrapeBusinessesParallelAsync(string category, string city, string? country, string language, int maxResults, CancellationToken cancellationToken = default);
 }
 
-public class GoogleMapsScraperService : IGoogleMapsScraperService
+public class ParallelGoogleMapsScraperService : IParallelGoogleMapsScraperService
 {
-    private readonly ILogger<GoogleMapsScraperService> _logger;
+    private readonly ILogger<ParallelGoogleMapsScraperService> _logger;
     private readonly ProxyManager _proxyManager;
     private readonly Random _random = new();
-    private readonly Faker _faker = new();
 
-    // Ban koruması için User-Agent listesi
     private readonly string[] _userAgents = new[]
     {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -31,61 +29,151 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     };
 
-    public GoogleMapsScraperService(ILogger<GoogleMapsScraperService> logger, ProxyManager proxyManager)
+    public ParallelGoogleMapsScraperService(ILogger<ParallelGoogleMapsScraperService> logger, ProxyManager proxyManager)
     {
         _logger = logger;
         _proxyManager = proxyManager;
     }
 
-    public async Task<List<BusinessDto>> ScrapeBusinessesAsync(
-        string category, 
-        string city, 
-        string? country, 
-        string language, 
-        int maxResults, 
+    public async Task<List<BusinessDto>> ScrapeBusinessesParallelAsync(
+        string category,
+        string city,
+        string? country,
+        string language,
+        int maxResults,
         CancellationToken cancellationToken = default)
+    {
+        var startTime = DateTime.UtcNow;
+        _logger.LogInformation("🚀 PARALLEL Scraping başlatılıyor: {Category} - {City}, Hedef: {MaxResults}", category, city, maxResults);
+
+        // Tüm işletmeleri toplamak için thread-safe koleksiyon
+        var allBusinesses = new ConcurrentBag<BusinessDto>();
+        var processedUrls = new ConcurrentDictionary<string, bool>();
+
+        // Available proxies
+        var availableProxies = _proxyManager.GetHealthyProxies();
+        var proxyCount = availableProxies.Count;
+        
+        if (proxyCount == 0)
+        {
+            _logger.LogWarning("⚠️ Hiç sağlıklı proxy yok, proxy olmadan devam ediliyor");
+            availableProxies.Add(null!); // Null proxy ekle (proxy'siz çalış)
+            proxyCount = 1;
+        }
+
+        _logger.LogInformation("💪 {Count} proxy ile paralel scraping yapılacak", proxyCount);
+
+        // Her proxy için kaç işletme alacağını hesapla
+        var resultsPerProxy = (int)Math.Ceiling((double)maxResults / proxyCount);
+        _logger.LogInformation("📊 Her proxy {PerProxy} işletme toplayacak", resultsPerProxy);
+
+        // Paralel scraping taskları oluştur
+        var scrapingTasks = availableProxies.Select(async (proxy, index) =>
+        {
+            var proxyId = proxy?.Address ?? "no-proxy";
+            _logger.LogInformation("🔄 Proxy #{Index} ({ProxyId}) başlatılıyor...", index + 1, proxyId);
+
+            try
+            {
+                var businesses = await ScrapeWithSingleProxy(
+                    proxy,
+                    category,
+                    city,
+                    country,
+                    language,
+                    resultsPerProxy,
+                    index,
+                    cancellationToken);
+
+                // Bulunan işletmeleri ana koleksiyona ekle (duplicate kontrolü ile)
+                foreach (var business in businesses)
+                {
+                    if (!string.IsNullOrEmpty(business.GoogleMapsUrl) &&
+                        processedUrls.TryAdd(business.GoogleMapsUrl, true))
+                    {
+                        allBusinesses.Add(business);
+                    }
+                }
+
+                _logger.LogInformation("✅ Proxy #{Index} tamamlandı: {Count} işletme bulundu", index + 1, businesses.Count);
+                
+                // Başarılı proxy
+                if (proxy != null)
+                {
+                    _proxyManager.ReportProxySuccess(proxy);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Proxy #{Index} ({ProxyId}) başarısız oldu", index + 1, proxyId);
+                
+                if (proxy != null)
+                {
+                    _proxyManager.ReportProxyFailure(proxy);
+                }
+            }
+        }).ToList();
+
+        // Tüm paralel scraping'lerin bitmesini bekle
+        await Task.WhenAll(scrapingTasks);
+
+        // Sonuçları listele ve maxResults'a göre kes
+        var finalResults = allBusinesses
+            .DistinctBy(b => b.GoogleMapsUrl)
+            .Take(maxResults)
+            .ToList();
+
+        var duration = DateTime.UtcNow - startTime;
+        _logger.LogInformation("🎉 PARALLEL Scraping tamamlandı! {Count}/{Target} işletme bulundu, Süre: {Duration:mm\\:ss}", 
+            finalResults.Count, maxResults, duration);
+
+        return finalResults;
+    }
+
+    private async Task<List<BusinessDto>> ScrapeWithSingleProxy(
+        Models.ProxyConfig? proxyConfig,
+        string category,
+        string city,
+        string? country,
+        string language,
+        int maxResults,
+        int proxyIndex,
+        CancellationToken cancellationToken)
     {
         var businesses = new List<BusinessDto>();
         IWebDriver? driver = null;
 
         try
         {
-            _logger.LogInformation("🚀 Scraping başlatılıyor: {Category} - {City}", category, city);
-
-            // Proxy seç
-            var selectedProxy = _proxyManager.GetNextProxy();
-            
-            // Selenium WebDriver'ı konfigüre et
-            driver = ConfigureWebDriver(selectedProxy);
+            // WebDriver konfigüre et
+            driver = ConfigureWebDriver(proxyConfig, proxyIndex);
 
             // Google Maps URL'ini oluştur
-            var searchQuery = BuildSearchQuery(category, city, country, language);
+            var searchQuery = BuildSearchQuery(category, city, country);
             var googleMapsUrl = $"https://www.google.com/maps/search/{Uri.EscapeDataString(searchQuery)}";
 
-            _logger.LogInformation("📍 URL: {Url}", googleMapsUrl);
+            _logger.LogInformation("📍 Proxy #{Index}: URL açılıyor: {Url}", proxyIndex + 1, googleMapsUrl);
 
             // Sayfayı aç
             driver.Navigate().GoToUrl(googleMapsUrl);
 
-            // İlk yüklenme beklemesi (insan gibi davran)
-            await HumanLikeDelay(3000, 5000, cancellationToken);
+            // İlk yüklenme beklemesi (daha kısa - paralel çalıştığımız için)
+            await Task.Delay(_random.Next(2000, 3000), cancellationToken);
 
             // Cookie popup'ı kapat (varsa)
             await CloseCookiePopup(driver, cancellationToken);
 
             // Sonuç listesini bekle
-            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
+            var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(15));
             wait.Until(d => d.FindElements(By.CssSelector("div[role='article']")).Count > 0);
 
-            _logger.LogInformation("✅ Sonuç listesi yüklendi");
+            _logger.LogInformation("✅ Proxy #{Index}: Sonuç listesi yüklendi", proxyIndex + 1);
 
             int processedCount = 0;
             int scrollAttempts = 0;
-            const int maxScrollAttempts = 50; // Daha fazla scroll denemesi (100 firma için yeterli)
-            var processedUrls = new HashSet<string>(); // Duplicate kontrolü
-            int lastProcessedIndex = 0; // Hangi index'ten başlayacağımızı takip et
-
-            _logger.LogInformation("🎯 Hedef: {MaxResults} işletme bulunacak", maxResults);
+            const int maxScrollAttempts = 30;
+            var processedUrls = new HashSet<string>();
+            int lastProcessedIndex = 0;
 
             while (processedCount < maxResults && scrollAttempts < maxScrollAttempts)
             {
@@ -93,123 +181,82 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
 
                 // Mevcut işletmeleri al
                 var businessElements = driver.FindElements(By.CssSelector("div[role='article']"));
-                _logger.LogInformation("📊 Sayfada görünen işletme sayısı: {Count}, İşlenen: {Processed}/{Target}", 
-                    businessElements.Count, processedCount, maxResults);
 
-                // Yeni işletmeleri işle (daha önce işlenenleri atla)
+                // Yeni işletmeleri işle
                 for (int i = lastProcessedIndex; i < businessElements.Count && processedCount < maxResults; i++)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
                     try
                     {
                         var element = businessElements[i];
 
-                        // İşletmeye tıkla (detayları görmek için)
+                        // İşletmeye tıkla
                         await ScrollToElement(driver, element, cancellationToken);
-                        await HumanLikeDelay(500, 1000, cancellationToken);
-
+                        await Task.Delay(_random.Next(300, 600), cancellationToken); // Daha kısa bekleme
                         element.Click();
-                        _logger.LogInformation("👆 İşletme tıklandı: {Current}/{Target}", processedCount + 1, maxResults);
 
-                        // Detayların yüklenmesini bekle (insan gibi)
-                        await HumanLikeDelay(3000, 7000, cancellationToken);
+                        // Detayların yüklenmesini bekle (daha kısa - proxy kullanıyoruz)
+                        await Task.Delay(_random.Next(2000, 3000), cancellationToken);
 
                         // İşletme verilerini çek
                         var business = await ExtractBusinessData(driver, category, city, country, cancellationToken);
 
                         if (business != null && !string.IsNullOrEmpty(business.GoogleMapsUrl))
                         {
-                            // Duplicate kontrolü (aynı işletmeyi tekrar ekleme)
                             if (!processedUrls.Contains(business.GoogleMapsUrl))
                             {
                                 businesses.Add(business);
                                 processedUrls.Add(business.GoogleMapsUrl);
                                 processedCount++;
-                                
-                                _logger.LogInformation("✅ İşletme eklendi: {Name} ({Current}/{Target})", 
-                                    business.BusinessName, processedCount, maxResults);
 
-                                // TAM SAYIYA ULAŞILDIYSA DUR!
+                                if (processedCount % 5 == 0)
+                                {
+                                    _logger.LogInformation("📊 Proxy #{Index}: {Current}/{Target} işletme toplandı",
+                                        proxyIndex + 1, processedCount, maxResults);
+                                }
+
                                 if (processedCount >= maxResults)
                                 {
-                                    _logger.LogInformation("🎉 Hedef sayıya ulaşıldı! {Count} işletme bulundu.", processedCount);
                                     break;
                                 }
                             }
-                            else
-                            {
-                                _logger.LogInformation("⏭️  Duplicate işletme atlandı");
-                            }
-                        }
-
-                        // Her 20 işletmeden sonra 60 saniye dinlen (BAN KORUMASIN)
-                        if (processedCount % 20 == 0 && processedCount > 0 && processedCount < maxResults)
-                        {
-                            _logger.LogWarning("⏸️  Ban koruması: 60 saniye bekleniyor... ({Current}/{Target})", 
-                                processedCount, maxResults);
-                            await Task.Delay(60000, cancellationToken);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "⚠️ İşletme verisi çekilemedi, atlanıyor");
+                        _logger.LogWarning("⚠️ Proxy #{Index}: İşletme atlandı: {Message}", proxyIndex + 1, ex.Message);
                         continue;
                     }
                 }
 
-                // Son işlenen index'i güncelle
                 lastProcessedIndex = businessElements.Count;
 
-                // TAM SAYIYA ULAŞILDIYSA DÖNGÜDEN ÇIK
                 if (processedCount >= maxResults)
                 {
-                    _logger.LogInformation("✅ İstenen {MaxResults} işletme bulundu, scraping durduruluyor.", maxResults);
                     break;
                 }
 
-                // Daha fazla sonuç için scroll yap
-                _logger.LogInformation("📜 Daha fazla sonuç için scroll yapılıyor... ({Current}/{Target})", 
-                    processedCount, maxResults);
-                
+                // Daha fazla sonuç için scroll
                 var previousCount = businessElements.Count;
                 await ScrollResultsList(driver, cancellationToken);
                 scrollAttempts++;
-                await HumanLikeDelay(3000, 5000, cancellationToken); // Daha uzun bekleme
+                await Task.Delay(_random.Next(1500, 2500), cancellationToken); // Daha kısa bekleme
 
                 // Yeni sonuçların yüklenmesini bekle
-                await Task.Delay(3000, cancellationToken);
+                await Task.Delay(2000, cancellationToken);
 
-                // Eğer yeni sonuç gelmiyorsa (son sayfaya gelindi) döngüden çık
                 var newBusinessElements = driver.FindElements(By.CssSelector("div[role='article']"));
                 if (newBusinessElements.Count == previousCount)
                 {
-                    _logger.LogWarning("⚠️ Daha fazla sonuç bulunamadı. Son sayfaya ulaşıldı.");
+                    _logger.LogInformation("⚠️ Proxy #{Index}: Daha fazla sonuç yok", proxyIndex + 1);
                     break;
                 }
             }
 
-            if (processedCount < maxResults)
-            {
-                _logger.LogWarning("⚠️ Hedef sayıya ulaşılamadı. Bulunan: {Found}, Hedef: {Target}", 
-                    processedCount, maxResults);
-            }
-            else
-            {
-                _logger.LogInformation("🎉 Scraping başarıyla tamamlandı! Tam {Count} işletme bulundu.", businesses.Count);
-            }
+            _logger.LogInformation("✅ Proxy #{Index}: {Count} işletme toplandı", proxyIndex + 1, businesses.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Scraping hatası");
-            
-            // Proxy kullanıyorsak ve hata varsa rapor et
-            var currentProxy = _proxyManager.GetNextProxy();
-            if (currentProxy != null)
-            {
-                _proxyManager.ReportProxyFailure(currentProxy);
-            }
-            
+            _logger.LogError(ex, "❌ Proxy #{Index}: Scraping hatası", proxyIndex + 1);
             throw;
         }
         finally
@@ -221,7 +268,7 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         return businesses;
     }
 
-    private IWebDriver ConfigureWebDriver(Models.ProxyConfig? proxyConfig = null)
+    private IWebDriver ConfigureWebDriver(Models.ProxyConfig? proxyConfig, int proxyIndex)
     {
         var options = new ChromeOptions();
 
@@ -233,14 +280,15 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         options.AddExcludedArgument("enable-automation");
         options.AddAdditionalOption("useAutomationExtension", false);
 
-        // Rastgele User-Agent
-        var userAgent = _userAgents[_random.Next(_userAgents.Length)];
+        // Rastgele User-Agent (her proxy farklı)
+        var userAgent = _userAgents[proxyIndex % _userAgents.Length];
         options.AddArgument($"user-agent={userAgent}");
 
         // Proxy yapılandırması
         if (proxyConfig != null)
         {
             options = _proxyManager.ConfigureProxyForDriver(options, proxyConfig);
+            _logger.LogInformation("🔌 Proxy #{Index} yapılandırıldı: {Address}", proxyIndex + 1, proxyConfig.Address);
         }
 
         // WebDriver oluştur
@@ -254,20 +302,18 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         return driver;
     }
 
-    private string BuildSearchQuery(string category, string city, string? country, string language)
+    private string BuildSearchQuery(string category, string city, string? country)
     {
-        // Google Maps için daha spesifik sorgu formatı
-        // Şehir adını önce yazıp sonra kategori ekleyerek daha iyi sonuç alıyoruz
+        // Şehir önce, sonra ülke, sonra kategori (daha iyi sonuç için)
         var query = $"{city}";
-        
+
         if (!string.IsNullOrEmpty(country))
         {
             query += $", {country}";
         }
-        
+
         query += $" {category}";
-        
-        _logger.LogInformation("🔍 Arama sorgusu: {Query}", query);
+
         return query;
     }
 
@@ -275,26 +321,22 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
     {
         try
         {
-            await Task.Delay(1000, cancellationToken);
+            await Task.Delay(500, cancellationToken);
             var acceptButtons = driver.FindElements(By.XPath("//button[contains(., 'Accept') or contains(., 'Kabul') or contains(., 'Tamam')]"));
             if (acceptButtons.Any())
             {
                 acceptButtons.First().Click();
-                _logger.LogInformation("🍪 Cookie popup kapatıldı");
-                await Task.Delay(500, cancellationToken);
+                await Task.Delay(300, cancellationToken);
             }
         }
-        catch
-        {
-            // Cookie popup yoksa devam et
-        }
+        catch { }
     }
 
     private async Task<BusinessDto?> ExtractBusinessData(
-        IWebDriver driver, 
-        string category, 
-        string city, 
-        string? country, 
+        IWebDriver driver,
+        string category,
+        string city,
+        string? country,
         CancellationToken cancellationToken)
     {
         try
@@ -349,8 +391,7 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
             {
                 var ratingElement = driver.FindElement(By.CssSelector("div.F7nice span[role='img']"));
                 var ratingText = ratingElement.GetAttribute("aria-label");
-                
-                // "4.5 stars, 120 reviews" formatında parse et
+
                 var parts = ratingText.Split(',');
                 if (parts.Length >= 1)
                 {
@@ -360,7 +401,7 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
                         business.Rating = rating;
                     }
                 }
-                
+
                 if (parts.Length >= 2)
                 {
                     var reviewStr = parts[1].Replace(" reviews", "").Replace(" yorum", "").Trim();
@@ -396,7 +437,6 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "⚠️ İşletme verisi çıkarılamadı");
             return null;
         }
     }
@@ -405,32 +445,21 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
     {
         try
         {
-            // Sonuç listesi container'ını bul
             var scrollableDiv = driver.FindElement(By.CssSelector("div[role='feed']"));
-            
-            // Yavaş ve kesik kesik scroll (insan gibi)
             var js = (IJavaScriptExecutor)driver;
             var scrollHeight = (long)js.ExecuteScript("return arguments[0].scrollHeight", scrollableDiv);
             var currentScroll = 0L;
-            var scrollStep = 300; // Her seferinde 300px scroll
+            var scrollStep = 500; // Daha hızlı scroll
 
             while (currentScroll < scrollHeight)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
                 js.ExecuteScript($"arguments[0].scrollTop += {scrollStep}", scrollableDiv);
                 currentScroll += scrollStep;
-
-                // Her scroll'da kısa bekle (insan gibi)
-                await Task.Delay(_random.Next(200, 500), cancellationToken);
+                await Task.Delay(_random.Next(100, 300), cancellationToken); // Daha kısa bekleme
             }
-
-            _logger.LogInformation("📜 Sayfa kaydırıldı");
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "⚠️ Scroll yapılamadı");
-        }
+        catch { }
     }
 
     private async Task ScrollToElement(IWebDriver driver, IWebElement element, CancellationToken cancellationToken)
@@ -439,14 +468,8 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
         {
             var js = (IJavaScriptExecutor)driver;
             js.ExecuteScript("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element);
-            await Task.Delay(_random.Next(300, 700), cancellationToken);
+            await Task.Delay(_random.Next(200, 400), cancellationToken); // Daha kısa bekleme
         }
         catch { }
-    }
-
-    private async Task HumanLikeDelay(int minMs, int maxMs, CancellationToken cancellationToken)
-    {
-        var delay = _random.Next(minMs, maxMs);
-        await Task.Delay(delay, cancellationToken);
     }
 }

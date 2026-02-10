@@ -10,12 +10,14 @@
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Bogus" Version="35.6.5" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="Google.Cloud.AIPlatform.V1" Version="2.30.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Mscc.GenerativeAI" Version="3.0.2" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
     <PackageReference Include="Selenium.WebDriver" Version="4.40.0" />
     <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="144.0.7559.13300" />

@@ -19,17 +19,23 @@ public class ScraperController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly IGoogleMapsScraperService _scraperService;
+    private readonly IParallelGoogleMapsScraperService _parallelScraperService;
+    private readonly IGeminiSearchService _geminiSearchService;
     private readonly IExcelExportService _excelService;
     private readonly ILogger<ScraperController> _logger;
 
     public ScraperController(
         ApplicationDbContext context,
         IGoogleMapsScraperService scraperService,
+        IParallelGoogleMapsScraperService parallelScraperService,
+        IGeminiSearchService geminiSearchService,
         IExcelExportService excelService,
         ILogger<ScraperController> logger)
     {
         _context = context;
         _scraperService = scraperService;
+        _parallelScraperService = parallelScraperService;
+        _geminiSearchService = geminiSearchService;
         _excelService = excelService;
         _logger = logger;
     }
@@ -123,22 +129,23 @@ public class ScraperController : ControllerBase
                 // Veritabanına kaydet
                 foreach (var businessDto in businesses)
                 {
+                    // 🔧 FIX: Truncate long values to fit database constraints
                     var business = new Business
                     {
                         UserId = userId,
                         ScrapingJobId = job.Id, // ✅ Job ID'yi kaydet
-                        BusinessName = businessDto.BusinessName,
-                        Address = businessDto.Address,
-                        Phone = businessDto.Phone,
-                        Website = businessDto.Website,
+                        BusinessName = TruncateString(businessDto.BusinessName, 300),
+                        Address = TruncateString(businessDto.Address, 500),
+                        Phone = TruncateString(businessDto.Phone, 50),
+                        Website = TruncateString(businessDto.Website, 500),
                         Rating = businessDto.Rating,
                         ReviewCount = businessDto.ReviewCount,
-                        WorkingHours = businessDto.WorkingHours,
-                        Category = businessDto.Category,
-                        City = businessDto.City,
-                        Country = businessDto.Country,
+                        WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
+                        Category = TruncateString(businessDto.Category, 200),
+                        City = TruncateString(businessDto.City, 100),
+                        Country = TruncateString(businessDto.Country, 100),
                         Language = request.Language,
-                        GoogleMapsUrl = businessDto.GoogleMapsUrl
+                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
                     };
 
                     _context.Businesses.Add(business);
@@ -178,7 +185,7 @@ public class ScraperController : ControllerBase
 
                 // Job'ı hata olarak işaretle
                 job.Status = "Failed";
-                job.ErrorMessage = ex.Message;
+                job.ErrorMessage = TruncateString(ex.Message, 1000); // ✅ Truncate error message
                 job.CompletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
@@ -326,5 +333,327 @@ public class ScraperController : ControllerBase
             _logger.LogError(ex, "❌ Kredi getirme hatası");
             return StatusCode(500, new { message = "Kredi bilgisi alınamadı", error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Start PARALLEL scraping with multiple proxies for high-speed results
+    /// </summary>
+    [HttpPost("scrape-parallel")]
+    [ProducesResponseType(typeof(ScrapeResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
+    public async Task<ActionResult<ScrapeResponseDto>> ScrapeBusinessesParallel([FromBody] ScrapeRequestDto request)
+    {
+        try
+        {
+            // Validate request
+            if (!request.IsValid())
+            {
+                return BadRequest(new 
+                { 
+                    message = "Lütfen 'category' + 'city' parametrelerini gönderin",
+                    example = new { category = "mobilya", city = "Istanbul", country = "Turkey", maxResults = 50 }
+                });
+            }
+
+            // Get user ID from JWT
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Geçersiz kullanıcı token'ı" });
+            }
+
+            // Find user
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized(new { message = "Kullanıcı bulunamadı" });
+            }
+
+            // Credit check
+            var requiredCredits = request.MaxResults;
+            if (user.Credits < requiredCredits)
+            {
+                return StatusCode(402, new 
+                { 
+                    message = $"Yetersiz kredi. Gerekli: {requiredCredits}, Mevcut: {user.Credits}",
+                    requiredCredits,
+                    availableCredits = user.Credits
+                });
+            }
+
+            var category = request.Category ?? "business";
+            var city = request.City ?? "";
+
+            _logger.LogInformation("🚀 PARALLEL Scraping isteği alındı: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
+                userId, category, city, request.MaxResults);
+
+            // Create scraping job
+            var job = new ScrapingJob
+            {
+                UserId = userId,
+                Category = category,
+                City = city,
+                Country = request.Country ?? "Turkey",
+                Language = request.Language,
+                Status = "InProgress",
+                StartedAt = DateTime.UtcNow
+            };
+
+            _context.ScrapingJobs.Add(job);
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                // PARALLEL scraping with multiple proxies
+                var businesses = await _parallelScraperService.ScrapeBusinessesParallelAsync(
+                    category,
+                    city,
+                    request.Country,
+                    request.Language,
+                    request.MaxResults,
+                    HttpContext.RequestAborted
+                );
+
+                _logger.LogInformation("✅ PARALLEL Scraping tamamlandı: {Count} işletme bulundu", businesses.Count);
+
+                // Save to database
+                foreach (var businessDto in businesses)
+                {
+                    // 🔧 FIX: Truncate long values to fit database constraints
+                    var business = new Business
+                    {
+                        UserId = userId,
+                        ScrapingJobId = job.Id,
+                        BusinessName = TruncateString(businessDto.BusinessName, 300),
+                        Address = TruncateString(businessDto.Address, 500),
+                        Phone = TruncateString(businessDto.Phone, 50),
+                        Website = TruncateString(businessDto.Website, 500),
+                        Rating = businessDto.Rating,
+                        ReviewCount = businessDto.ReviewCount,
+                        WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
+                        Category = TruncateString(businessDto.Category, 200),
+                        City = TruncateString(businessDto.City, 100),
+                        Country = TruncateString(businessDto.Country, 100),
+                        Language = request.Language,
+                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
+                    };
+
+                    _context.Businesses.Add(business);
+                }
+
+                // Deduct credits
+                var actualCreditsUsed = businesses.Count;
+                user.Credits -= actualCreditsUsed;
+
+                // Update job
+                job.Status = "Completed";
+                job.TotalResults = businesses.Count;
+                job.CreditsUsed = actualCreditsUsed;
+                job.CompletedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
+
+                // Response
+                var response = new ScrapeResponseDto
+                {
+                    JobId = job.Id,
+                    Status = "Completed",
+                    Message = $"Başarıyla {businesses.Count} işletme bulundu ve kaydedildi. (PARALLEL MODE)",
+                    TotalResults = businesses.Count,
+                    CreditsUsed = actualCreditsUsed,
+                    Businesses = businesses,
+                    DownloadUrl = $"/api/scraper/download/{job.Id}"
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ PARALLEL Scraping hatası");
+
+                // Mark job as failed
+                job.Status = "Failed";
+                job.ErrorMessage = TruncateString(ex.Message, 1000); // ✅ Truncate error message
+                job.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(500, new { message = "Parallel scraping başarısız oldu", error = ex.Message });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Beklenmeyen hata");
+            return StatusCode(500, new { message = "Bir hata oluştu", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// ULTRA-FAST scraping with Gemini AI + Google Search Tool
+    /// </summary>
+    [HttpPost("scrape-gemini")]
+    [ProducesResponseType(typeof(ScrapeResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
+    public async Task<ActionResult<ScrapeResponseDto>> ScrapeBusinessesWithGemini([FromBody] ScrapeRequestDto request)
+    {
+        try
+        {
+            // Validate request
+            if (!request.IsValid())
+            {
+                return BadRequest(new 
+                { 
+                    message = "Lütfen 'category' + 'city' parametrelerini gönderin",
+                    example = new { category = "restaurant", city = "Istanbul", country = "Turkey", maxResults = 50 }
+                });
+            }
+
+            // Get user ID from JWT
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Geçersiz kullanıcı token'ı" });
+            }
+
+            // Find user
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+            {
+                return Unauthorized(new { message = "Kullanıcı bulunamadı" });
+            }
+
+            // Credit check
+            var requiredCredits = request.MaxResults;
+            if (user.Credits < requiredCredits)
+            {
+                return StatusCode(402, new 
+                { 
+                    message = $"Yetersiz kredi. Gerekli: {requiredCredits}, Mevcut: {user.Credits}",
+                    requiredCredits,
+                    availableCredits = user.Credits
+                });
+            }
+
+            var category = request.Category ?? "business";
+            var city = request.City ?? "";
+
+            _logger.LogInformation("🤖 GEMINI AI Scraping isteği alındı: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
+                userId, category, city, request.MaxResults);
+
+            // Create scraping job
+            var job = new ScrapingJob
+            {
+                UserId = userId,
+                Category = category,
+                City = city,
+                Country = request.Country ?? "Turkey",
+                Language = request.Language,
+                Status = "InProgress",
+                StartedAt = DateTime.UtcNow
+            };
+
+            _context.ScrapingJobs.Add(job);
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                // GEMINI AI scraping with Google Search
+                var businesses = await _geminiSearchService.SearchBusinessesAsync(
+                    category,
+                    city,
+                    request.Country,
+                    request.MaxResults,
+                    HttpContext.RequestAborted
+                );
+
+                _logger.LogInformation("✅ GEMINI AI Scraping tamamlandı: {Count} işletme bulundu", businesses.Count);
+
+                // Save to database
+                foreach (var businessDto in businesses)
+                {
+                    // 🔧 FIX: Truncate long values to fit database constraints
+                    var business = new Business
+                    {
+                        UserId = userId,
+                        ScrapingJobId = job.Id,
+                        BusinessName = TruncateString(businessDto.BusinessName, 300),
+                        Address = TruncateString(businessDto.Address, 500),
+                        Phone = TruncateString(businessDto.Phone, 50),
+                        Website = TruncateString(businessDto.Website, 500),
+                        Rating = businessDto.Rating,
+                        ReviewCount = businessDto.ReviewCount,
+                        WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
+                        Category = TruncateString(businessDto.Category, 200),
+                        City = TruncateString(businessDto.City, 100),
+                        Country = TruncateString(businessDto.Country, 100),
+                        Language = request.Language,
+                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
+                    };
+
+                    _context.Businesses.Add(business);
+                }
+
+                // Deduct credits
+                var actualCreditsUsed = businesses.Count;
+                user.Credits -= actualCreditsUsed;
+
+                // Update job
+                job.Status = "Completed";
+                job.TotalResults = businesses.Count;
+                job.CreditsUsed = actualCreditsUsed;
+                job.CompletedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
+
+                // Response
+                var response = new ScrapeResponseDto
+                {
+                    JobId = job.Id,
+                    Status = "Completed",
+                    Message = $"🤖 Gemini AI ile {businesses.Count} işletme bulundu ve kaydedildi!",
+                    TotalResults = businesses.Count,
+                    CreditsUsed = actualCreditsUsed,
+                    Businesses = businesses,
+                    DownloadUrl = $"/api/scraper/download/{job.Id}"
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ GEMINI AI Scraping hatası");
+
+                // Mark job as failed
+                job.Status = "Failed";
+                job.ErrorMessage = TruncateString(ex.Message, 1000); // ✅ Truncate error message
+                job.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(500, new { message = "Gemini AI scraping başarısız oldu", error = ex.Message });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Beklenmeyen hata");
+            return StatusCode(500, new { message = "Bir hata oluştu", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Helper method to truncate strings to fit database constraints
+    /// </summary>
+    private static string? TruncateString(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 }
