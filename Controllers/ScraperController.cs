@@ -137,15 +137,18 @@ public class ScraperController : ControllerBase
                         BusinessName = TruncateString(businessDto.BusinessName, 300),
                         Address = TruncateString(businessDto.Address, 500),
                         Phone = TruncateString(businessDto.Phone, 50),
+                        Mobile = TruncateString(businessDto.Mobile, 50),
+                        Email = TruncateString(businessDto.Email, 255),
                         Website = TruncateString(businessDto.Website, 500),
+                        SocialMedia = TruncateString(businessDto.SocialMedia, 500),
+                        Comments = TruncateString(businessDto.Comments, 2000),
                         Rating = businessDto.Rating,
                         ReviewCount = businessDto.ReviewCount,
                         WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
                         Category = TruncateString(businessDto.Category, 200),
                         City = TruncateString(businessDto.City, 100),
                         Country = TruncateString(businessDto.Country, 100),
-                        Language = request.Language,
-                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
+                        Language = request.Language
                     };
 
                     _context.Businesses.Add(business);
@@ -243,14 +246,17 @@ public class ScraperController : ControllerBase
                 BusinessName = b.BusinessName,
                 Address = b.Address,
                 Phone = b.Phone,
+                Mobile = b.Mobile,
+                Email = b.Email,
                 Website = b.Website,
+                SocialMedia = b.SocialMedia,
+                Comments = b.Comments,
                 Rating = b.Rating,
                 ReviewCount = b.ReviewCount,
                 WorkingHours = b.WorkingHours,
                 Category = b.Category,
                 City = b.City,
-                Country = b.Country,
-                GoogleMapsUrl = b.GoogleMapsUrl
+                Country = b.Country
             }).ToList();
 
             // Excel oluştur
@@ -437,7 +443,6 @@ public class ScraperController : ControllerBase
                         City = TruncateString(businessDto.City, 100),
                         Country = TruncateString(businessDto.Country, 100),
                         Language = request.Language,
-                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
                     };
 
                     _context.Businesses.Add(business);
@@ -592,7 +597,6 @@ public class ScraperController : ControllerBase
                         City = TruncateString(businessDto.City, 100),
                         Country = TruncateString(businessDto.Country, 100),
                         Language = request.Language,
-                        GoogleMapsUrl = TruncateString(businessDto.GoogleMapsUrl, 1000)
                     };
 
                     _context.Businesses.Add(business);

@@ -118,29 +118,25 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
                         // İşletme verilerini çek
                         var business = await ExtractBusinessData(driver, category, city, country, cancellationToken);
 
-                        if (business != null && !string.IsNullOrEmpty(business.GoogleMapsUrl))
+                        // Duplicate kontrolü (aynı işletmeyi tekrar ekleme)
+                        if (business != null)
                         {
-                            // Duplicate kontrolü (aynı işletmeyi tekrar ekleme)
-                            if (!processedUrls.Contains(business.GoogleMapsUrl))
-                            {
-                                businesses.Add(business);
-                                processedUrls.Add(business.GoogleMapsUrl);
-                                processedCount++;
-                                
-                                _logger.LogInformation("✅ İşletme eklendi: {Name} ({Current}/{Target})", 
-                                    business.BusinessName, processedCount, maxResults);
+                            businesses.Add(business);
+                            processedCount++;
+                            
+                            _logger.LogInformation("✅ İşletme eklendi: {Name} ({Current}/{Target})", 
+                                business.BusinessName, processedCount, maxResults);
 
-                                // TAM SAYIYA ULAŞILDIYSA DUR!
-                                if (processedCount >= maxResults)
-                                {
-                                    _logger.LogInformation("🎉 Hedef sayıya ulaşıldı! {Count} işletme bulundu.", processedCount);
-                                    break;
-                                }
-                            }
-                            else
+                            // TAM SAYIYA ULAŞILDIYSA DUR!
+                            if (processedCount >= maxResults)
                             {
-                                _logger.LogInformation("⏭️  Duplicate işletme atlandı");
+                                _logger.LogInformation("🎉 Hedef sayıya ulaşıldı! {Count} işletme bulundu.", processedCount);
+                                break;
                             }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("⏭️  İşletme verisi çekilemedi");
                         }
 
                         // Her 20 işletmeden sonra 60 saniye dinlen (BAN KORUMASIN)
@@ -384,7 +380,6 @@ public class GoogleMapsScraperService : IGoogleMapsScraperService
             catch { }
 
             // Google Maps URL
-            business.GoogleMapsUrl = driver.Url;
 
             // En az isim olmalı
             if (string.IsNullOrEmpty(business.BusinessName))

@@ -19,20 +19,19 @@ public class ExcelExportService : IExcelExportService
         var worksheet = workbook.Worksheets.Add($"{category} - {city}");
 
         // Header'ları oluştur
-        worksheet.Cell(1, 1).Value = "İşletme Adı";
+        worksheet.Cell(1, 1).Value = "Firma Adı";
         worksheet.Cell(1, 2).Value = "Adres";
-        worksheet.Cell(1, 3).Value = "Telefon";
-        worksheet.Cell(1, 4).Value = "Website";
-        worksheet.Cell(1, 5).Value = "Puan";
-        worksheet.Cell(1, 6).Value = "Yorum Sayısı";
-        worksheet.Cell(1, 7).Value = "Çalışma Saatleri";
-        worksheet.Cell(1, 8).Value = "Kategori";
-        worksheet.Cell(1, 9).Value = "Şehir";
-        worksheet.Cell(1, 10).Value = "Ülke";
-        worksheet.Cell(1, 11).Value = "Google Maps URL";
+        worksheet.Cell(1, 3).Value = "Website";
+        worksheet.Cell(1, 4).Value = "E-mail";
+        worksheet.Cell(1, 5).Value = "Telefon";
+        worksheet.Cell(1, 6).Value = "Mobil";
+        worksheet.Cell(1, 7).Value = "Şehir";
+        worksheet.Cell(1, 8).Value = "Ülke";
+        worksheet.Cell(1, 9).Value = "Sosyal Medya";
+        worksheet.Cell(1, 10).Value = "Notlar";
 
         // Header'ları bold yap ve arka plan rengi ekle
-        var headerRange = worksheet.Range(1, 1, 1, 11);
+        var headerRange = worksheet.Range(1, 1, 1, 10);
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -43,15 +42,14 @@ public class ExcelExportService : IExcelExportService
         {
             worksheet.Cell(row, 1).Value = business.BusinessName;
             worksheet.Cell(row, 2).Value = business.Address ?? "";
-            worksheet.Cell(row, 3).Value = business.Phone ?? "";
-            worksheet.Cell(row, 4).Value = business.Website ?? "";
-            worksheet.Cell(row, 5).Value = business.Rating?.ToString() ?? "";
-            worksheet.Cell(row, 6).Value = business.ReviewCount?.ToString() ?? "";
-            worksheet.Cell(row, 7).Value = business.WorkingHours ?? "";
-            worksheet.Cell(row, 8).Value = business.Category ?? "";
-            worksheet.Cell(row, 9).Value = business.City ?? "";
-            worksheet.Cell(row, 10).Value = business.Country ?? "";
-            worksheet.Cell(row, 11).Value = business.GoogleMapsUrl ?? "";
+            worksheet.Cell(row, 3).Value = business.Website ?? "";
+            worksheet.Cell(row, 4).Value = business.Email ?? "";
+            worksheet.Cell(row, 5).Value = business.Phone ?? "";
+            worksheet.Cell(row, 6).Value = business.Mobile ?? "";
+            worksheet.Cell(row, 7).Value = business.City ?? "";
+            worksheet.Cell(row, 8).Value = business.Country ?? "";
+            worksheet.Cell(row, 9).Value = business.SocialMedia ?? "";
+            worksheet.Cell(row, 10).Value = business.Comments ?? "";
 
             row++;
         }

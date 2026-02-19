@@ -16,8 +16,13 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
-    options.EnableSensitiveDataLogging(); // ⚠️ Development only - shows parameter values
-    options.EnableDetailedErrors(); // Shows detailed error information
+    
+    // ⚠️ Detaylı logging sadece Development'ta
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging(); // Shows parameter values
+        options.EnableDetailedErrors(); // Shows detailed error information
+    }
 });
 
 // ===== JWT AUTHENTICATION CONFIGURATION =====
@@ -136,8 +141,11 @@ var app = builder.Build();
 // CORS middleware - En üstte olmalı (UseHttpsRedirection'dan önce)
 app.UseCors("AllowReactApp");
 
-// Development'da HTTPS yönlendirmeyi kapat
-// app.UseHttpsRedirection();
+// HTTPS yönlendirmesi (Production'da aktif olmalı)
+if (app.Environment.IsProduction())
+{
+    app.UseHttpsRedirection();
+}
 
 // Authentication & Authorization middleware
 app.UseAuthentication();

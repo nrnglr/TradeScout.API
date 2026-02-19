@@ -88,8 +88,6 @@ public class ParallelGoogleMapsScraperService : IParallelGoogleMapsScraperServic
                 // Bulunan işletmeleri ana koleksiyona ekle (duplicate kontrolü ile)
                 foreach (var business in businesses)
                 {
-                    if (!string.IsNullOrEmpty(business.GoogleMapsUrl) &&
-                        processedUrls.TryAdd(business.GoogleMapsUrl, true))
                     {
                         allBusinesses.Add(business);
                     }
@@ -119,7 +117,7 @@ public class ParallelGoogleMapsScraperService : IParallelGoogleMapsScraperServic
 
         // Sonuçları listele ve maxResults'a göre kes
         var finalResults = allBusinesses
-            .DistinctBy(b => b.GoogleMapsUrl)
+            .DistinctBy(b => b.BusinessName)
             .Take(maxResults)
             .ToList();
 
@@ -200,12 +198,9 @@ public class ParallelGoogleMapsScraperService : IParallelGoogleMapsScraperServic
                         // İşletme verilerini çek
                         var business = await ExtractBusinessData(driver, category, city, country, cancellationToken);
 
-                        if (business != null && !string.IsNullOrEmpty(business.GoogleMapsUrl))
                         {
-                            if (!processedUrls.Contains(business.GoogleMapsUrl))
                             {
                                 businesses.Add(business);
-                                processedUrls.Add(business.GoogleMapsUrl);
                                 processedCount++;
 
                                 if (processedCount % 5 == 0)
@@ -425,7 +420,6 @@ public class ParallelGoogleMapsScraperService : IParallelGoogleMapsScraperServic
             catch { }
 
             // Google Maps URL
-            business.GoogleMapsUrl = driver.Url;
 
             // En az isim olmalı
             if (string.IsNullOrEmpty(business.BusinessName))

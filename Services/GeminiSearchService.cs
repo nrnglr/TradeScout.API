@@ -53,9 +53,9 @@ public class GeminiSearchService : IGeminiSearchService
 
             _logger.LogInformation("📝 Gemini Prompt created");
 
-            // Use direct HTTP API call (v1 API - stable)
+            // Use direct HTTP API call (v1beta API)
             var httpClient = _httpClientFactory.CreateClient();
-            var apiUrl = $"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-lite:generateContent?key={_geminiApiKey}";
+            var apiUrl = $"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={_geminiApiKey}";
             
             var requestBody = new
             {
@@ -77,7 +77,7 @@ public class GeminiSearchService : IGeminiSearchService
                 "application/json"
             );
 
-            _logger.LogInformation("🤖 Calling Gemini API (gemini-2.0-flash-lite v1)...");
+            _logger.LogInformation("🤖 Calling Gemini API (gemini-2.5-flash v1)...");
             
             var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent, cancellationToken);
             var responseContent = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -136,29 +136,33 @@ HEDEF: En az {maxResults} işletme bul
 STRATEJİ:
 1. Google Search kullanarak belirtilen konumdaki işletmeleri tespit et
 2. Gerçek, aktif ve güncel işletmeleri seç
-3. Telefon, adres, web sitesi gibi iletişim bilgilerini bul
-4. Rating ve yorum sayılarını ekle
+3. Telefon, adres, web sitesi, e-mail gibi iletişim bilgilerini bul
+4. Sosyal medya profillerini (LinkedIn, Instagram, etc) tespit et
+5. Rating ve yorum sayılarını ekle
 
 FORMAT KURALLARI (KRİTİK):
 - Yanıtını SADECE aşağıdaki JSON formatında dön
 - Başına veya sonuna açıklama ekleme
 - Eğer veri bulamazsan boş bir array [] dön
 - JSON'un geçerli olduğundan emin ol
+- Bulunamayan alanları null olarak bırak (boş string değil!)
 
 JSON YAPISI:
 [
   {{
     ""businessName"": ""İşletme Adı"",
-    ""address"": ""Tam Adres"",
-    ""phone"": ""Telefon No"",
-    ""website"": ""Web Adresi"",
-    ""email"": ""E-posta (Varsa)"",
+    ""address"": ""Tam Adres (Sokak, No, Şehir, Posta Kodu)"",
+    ""phone"": ""Sabit Telefon No veya null"",
+    ""mobile"": ""Mobil No veya null"",
+    ""email"": ""E-posta Adresi veya null"",
+    ""website"": ""Web Adresi veya null"",
+    ""socialMedia"": ""LinkedIn/Instagram/Facebook URL veya null"",
+    ""comments"": ""Şirket hakkında kısa bilgi (sektör, çalışan sayısı, vb) veya null"",
     ""rating"": 4.5,
     ""reviewCount"": 120,
     ""category"": ""{sector}"",
     ""city"": ""{location.Split(',')[0].Trim()}"",
-    ""country"": ""{(location.Contains(",") ? location.Split(',')[1].Trim() : "Turkey")}"",
-    ""googleMapsUrl"": ""Google Maps Link (Varsa)""
+    ""country"": ""{(location.Contains(",") ? location.Split(',')[1].Trim() : "Turkey")}""
   }}
 ]
 

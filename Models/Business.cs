@@ -34,9 +34,25 @@ public class Business
     [MaxLength(50)]
     public string? Phone { get; set; }
 
+    [Column("Mobile")]
+    [MaxLength(50)]
+    public string? Mobile { get; set; }
+
+    [Column("Email")]
+    [MaxLength(255)]
+    public string? Email { get; set; }
+
     [Column("Website")]
     [MaxLength(500)]
     public string? Website { get; set; }
+
+    [Column("SocialMedia")]
+    [MaxLength(500)]
+    public string? SocialMedia { get; set; }
+
+    [Column("Comments")]
+    [MaxLength(2000)]
+    public string? Comments { get; set; }
 
     [Column("Rating")]
     public decimal? Rating { get; set; }
@@ -63,10 +79,6 @@ public class Business
     [Column("Language")]
     [MaxLength(50)]
     public string? Language { get; set; }
-
-    [Column("GoogleMapsUrl")]
-    [MaxLength(1000)]
-    public string? GoogleMapsUrl { get; set; }
 
     [Required]
     [Column("CreatedAt")]
