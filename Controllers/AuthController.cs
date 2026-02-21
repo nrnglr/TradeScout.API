@@ -67,7 +67,7 @@ public class AuthController : ControllerBase
                 Email = registerDto.Email.ToLower(),
                 PasswordHash = passwordHash,
                 CompanyName = registerDto.CompanyName,
-                Credits = 5,
+                Credits = 3,
                 PackageType = "Free",
                 Role = "User",
                 IsActive = true,

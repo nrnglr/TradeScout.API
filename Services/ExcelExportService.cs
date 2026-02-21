@@ -16,19 +16,25 @@ public class ExcelExportService : IExcelExportService
     public byte[] ExportToExcel(List<BusinessDto> businesses, string category, string city)
     {
         using var workbook = new XLWorkbook();
-        var worksheet = workbook.Worksheets.Add($"{category} - {city}");
+        // Sheet name maksimum 31 karakter olabilir
+        var sheetName = $"{category} - {city}";
+        if (sheetName.Length > 31)
+        {
+            sheetName = sheetName.Substring(0, 31);
+        }
+        var worksheet = workbook.Worksheets.Add(sheetName);
 
-        // Header'ları oluştur
-        worksheet.Cell(1, 1).Value = "Firma Adı";
-        worksheet.Cell(1, 2).Value = "Adres";
+        // Header'ları oluştur (İngilizce)
+        worksheet.Cell(1, 1).Value = "Company Name";
+        worksheet.Cell(1, 2).Value = "Address";
         worksheet.Cell(1, 3).Value = "Website";
-        worksheet.Cell(1, 4).Value = "E-mail";
-        worksheet.Cell(1, 5).Value = "Telefon";
-        worksheet.Cell(1, 6).Value = "Mobil";
-        worksheet.Cell(1, 7).Value = "Şehir";
-        worksheet.Cell(1, 8).Value = "Ülke";
-        worksheet.Cell(1, 9).Value = "Sosyal Medya";
-        worksheet.Cell(1, 10).Value = "Notlar";
+        worksheet.Cell(1, 4).Value = "Email";
+        worksheet.Cell(1, 5).Value = "Phone";
+        worksheet.Cell(1, 6).Value = "Mobile";
+        worksheet.Cell(1, 7).Value = "City";
+        worksheet.Cell(1, 8).Value = "Country";
+        worksheet.Cell(1, 9).Value = "Social Media";
+        worksheet.Cell(1, 10).Value = "Comments";
 
         // Header'ları bold yap ve arka plan rengi ekle
         var headerRange = worksheet.Range(1, 1, 1, 10);

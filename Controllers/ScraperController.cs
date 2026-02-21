@@ -377,9 +377,9 @@ public class ScraperController : ControllerBase
                 return Unauthorized(new { message = "Kullanıcı bulunamadı" });
             }
 
-            // Credit check
+            // Credit check (Admin users bypass this)
             var requiredCredits = request.MaxResults;
-            if (user.Credits < requiredCredits)
+            if (user.Role != "Admin" && user.Credits < requiredCredits)
             {
                 return StatusCode(402, new 
                 { 
@@ -391,6 +391,17 @@ public class ScraperController : ControllerBase
 
             var category = request.Category ?? "business";
             var city = request.City ?? "";
+
+            // Validate MaxResults for non-admin users
+            if (user.Role != "Admin" && request.MaxResults > 10)
+            {
+                return BadRequest(new
+                {
+                    message = "Maksimum 10 firma talebinde bulunabilirsiniz. Admin için limit yoktur.",
+                    maxAllowed = 10,
+                    requested = request.MaxResults
+                });
+            }
 
             _logger.LogInformation("🚀 PARALLEL Scraping isteği alındı: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
                 userId, category, city, request.MaxResults);
@@ -435,7 +446,11 @@ public class ScraperController : ControllerBase
                         BusinessName = TruncateString(businessDto.BusinessName, 300),
                         Address = TruncateString(businessDto.Address, 500),
                         Phone = TruncateString(businessDto.Phone, 50),
+                        Mobile = TruncateString(businessDto.Mobile, 50),
+                        Email = TruncateString(businessDto.Email, 255),
                         Website = TruncateString(businessDto.Website, 500),
+                        SocialMedia = TruncateString(businessDto.SocialMedia, 500),
+                        Comments = TruncateString(businessDto.Comments, 2000),
                         Rating = businessDto.Rating,
                         ReviewCount = businessDto.ReviewCount,
                         WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
@@ -448,14 +463,17 @@ public class ScraperController : ControllerBase
                     _context.Businesses.Add(business);
                 }
 
-                // Deduct credits
+                // Deduct credits (Admin users don't lose credits)
                 var actualCreditsUsed = businesses.Count;
-                user.Credits -= actualCreditsUsed;
+                if (user.Role != "Admin")
+                {
+                    user.Credits -= actualCreditsUsed;
+                }
 
                 // Update job
                 job.Status = "Completed";
                 job.TotalResults = businesses.Count;
-                job.CreditsUsed = actualCreditsUsed;
+                job.CreditsUsed = user.Role == "Admin" ? 0 : actualCreditsUsed;
                 job.CompletedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
@@ -532,9 +550,9 @@ public class ScraperController : ControllerBase
                 return Unauthorized(new { message = "Kullanıcı bulunamadı" });
             }
 
-            // Credit check
+            // Credit check (Admin users bypass this)
             var requiredCredits = request.MaxResults;
-            if (user.Credits < requiredCredits)
+            if (user.Role != "Admin" && user.Credits < requiredCredits)
             {
                 return StatusCode(402, new 
                 { 
@@ -546,6 +564,17 @@ public class ScraperController : ControllerBase
 
             var category = request.Category ?? "business";
             var city = request.City ?? "";
+
+            // Validate MaxResults for non-admin users
+            if (user.Role != "Admin" && request.MaxResults > 10)
+            {
+                return BadRequest(new
+                {
+                    message = "Maksimum 10 firma talebinde bulunabilirsiniz. Admin için limit yoktur.",
+                    maxAllowed = 10,
+                    requested = request.MaxResults
+                });
+            }
 
             _logger.LogInformation("🤖 GEMINI AI Scraping isteği alındı: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
                 userId, category, city, request.MaxResults);
@@ -589,7 +618,11 @@ public class ScraperController : ControllerBase
                         BusinessName = TruncateString(businessDto.BusinessName, 300),
                         Address = TruncateString(businessDto.Address, 500),
                         Phone = TruncateString(businessDto.Phone, 50),
+                        Mobile = TruncateString(businessDto.Mobile, 50),
+                        Email = TruncateString(businessDto.Email, 255),
                         Website = TruncateString(businessDto.Website, 500),
+                        SocialMedia = TruncateString(businessDto.SocialMedia, 500),
+                        Comments = TruncateString(businessDto.Comments, 2000),
                         Rating = businessDto.Rating,
                         ReviewCount = businessDto.ReviewCount,
                         WorkingHours = TruncateString(businessDto.WorkingHours, 1000),
@@ -602,14 +635,17 @@ public class ScraperController : ControllerBase
                     _context.Businesses.Add(business);
                 }
 
-                // Deduct credits
+                // Deduct credits (Admin users don't lose credits)
                 var actualCreditsUsed = businesses.Count;
-                user.Credits -= actualCreditsUsed;
+                if (user.Role != "Admin")
+                {
+                    user.Credits -= actualCreditsUsed;
+                }
 
                 // Update job
                 job.Status = "Completed";
                 job.TotalResults = businesses.Count;
-                job.CreditsUsed = actualCreditsUsed;
+                job.CreditsUsed = user.Role == "Admin" ? 0 : actualCreditsUsed;
                 job.CompletedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();

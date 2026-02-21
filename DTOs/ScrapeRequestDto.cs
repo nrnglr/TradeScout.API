@@ -42,10 +42,11 @@ public class ScrapeRequestDto
     public string Language { get; set; } = "tr";
 
     /// <summary>
-    /// Maximum number of results to scrape (1-100)
+    /// Maximum number of results to scrape (1-1000)
+    /// Normal users: max 10, Admin users: max 1000
     /// </summary>
-    [Range(1, 100, ErrorMessage = "Maksimum sonuç sayısı 1 ile 100 arasında olmalıdır")]
-    public int MaxResults { get; set; } = 20;
+    [Range(1, 1000, ErrorMessage = "Maksimum sonuç sayısı 1 ile 1000 arasında olmalıdır")]
+    public int MaxResults { get; set; } = 10;
 
     /// <summary>
     /// Validates that either SearchQuery or (Category + City) is provided

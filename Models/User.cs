@@ -38,6 +38,10 @@ public class User
     public int Credits { get; set; } = 5;
 
     [Required]
+    [Column("MaxResultsPerSearch")]
+    public int MaxResultsPerSearch { get; set; } = 10;
+
+    [Required]
     [Column("PackageType")]
     [MaxLength(50)]
     public string PackageType { get; set; } = "Free";

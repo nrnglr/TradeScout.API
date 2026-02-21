@@ -126,38 +126,38 @@ public class GeminiSearchService : IGeminiSearchService
 
     private string BuildSearchPrompt(string sector, string location, int maxResults)
     {
-        return $@"GÖREV: Sen ""TradeScout"" isimli profesyonel pazar araştırması yazılımının veri toplama motorusun. 
-Kullanıcının verdiği {{Sektör}} ve {{Şehir}} bilgilerini kullanarak Google Search ile en güncel işletme verilerini topla.
+        return $@"TASK: You are the data collection engine of ""TradeScout"" professional market research software. 
+Use Google Search with the sector and location provided by the user to collect the latest business data.
 
-SEKTÖR: {sector}
-KONUM: {location}
-HEDEF: En az {maxResults} işletme bul
+SECTOR: {sector}
+LOCATION: {location}
+TARGET: Find at least {maxResults} businesses
 
-STRATEJİ:
-1. Google Search kullanarak belirtilen konumdaki işletmeleri tespit et
-2. Gerçek, aktif ve güncel işletmeleri seç
-3. Telefon, adres, web sitesi, e-mail gibi iletişim bilgilerini bul
-4. Sosyal medya profillerini (LinkedIn, Instagram, etc) tespit et
-5. Rating ve yorum sayılarını ekle
+STRATEGY:
+1. Use Google Search to identify businesses in the specified location
+2. Select real, active, and current businesses
+3. Find contact information: phone, address, website, email
+4. Identify social media profiles (LinkedIn, Instagram, Facebook, etc.)
+5. Include rating and review count if available
 
-FORMAT KURALLARI (KRİTİK):
-- Yanıtını SADECE aşağıdaki JSON formatında dön
-- Başına veya sonuna açıklama ekleme
-- Eğer veri bulamazsan boş bir array [] dön
-- JSON'un geçerli olduğundan emin ol
-- Bulunamayan alanları null olarak bırak (boş string değil!)
+FORMATTING RULES (CRITICAL):
+- Return ONLY the JSON format below
+- Do NOT add any explanation or text before/after
+- If no data found, return empty array []
+- Ensure JSON is valid
+- Set missing fields to null (NOT empty string!)
 
-JSON YAPISI:
+JSON STRUCTURE:
 [
   {{
-    ""businessName"": ""İşletme Adı"",
-    ""address"": ""Tam Adres (Sokak, No, Şehir, Posta Kodu)"",
-    ""phone"": ""Sabit Telefon No veya null"",
-    ""mobile"": ""Mobil No veya null"",
-    ""email"": ""E-posta Adresi veya null"",
-    ""website"": ""Web Adresi veya null"",
-    ""socialMedia"": ""LinkedIn/Instagram/Facebook URL veya null"",
-    ""comments"": ""Şirket hakkında kısa bilgi (sektör, çalışan sayısı, vb) veya null"",
+    ""businessName"": ""Company Name"",
+    ""address"": ""Full Address (Street, No, City, Postal Code)"",
+    ""phone"": ""Phone Number or null"",
+    ""mobile"": ""Mobile Number or null"",
+    ""email"": ""Email Address or null"",
+    ""website"": ""Website URL or null"",
+    ""socialMedia"": ""LinkedIn/Instagram/Facebook URL or null"",
+    ""comments"": ""Brief company info (sector, employees, etc) or null"",
     ""rating"": 4.5,
     ""reviewCount"": 120,
     ""category"": ""{sector}"",
@@ -166,7 +166,7 @@ JSON YAPISI:
   }}
 ]
 
-ÖNEMLİ: Sadece JSON array döndür, başka hiçbir metin ekleme!";
+IMPORTANT: Return ONLY the JSON array, nothing else!";
     }
 
     private List<BusinessDto> ParseGeminiResponse(string responseText, string sector, string city, string? country)
