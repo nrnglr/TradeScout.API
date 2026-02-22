@@ -29,8 +29,11 @@ public class GeminiSearchService : IGeminiSearchService
         _logger = logger;
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
-        _geminiApiKey = _configuration["GeminiSettings:ApiKey"] 
-            ?? throw new InvalidOperationException("Gemini API Key is not configured in appsettings.json");
+        
+        // Get API key from environment variable first, then from appsettings
+        _geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") 
+            ?? _configuration["GeminiSettings:ApiKey"] 
+            ?? throw new InvalidOperationException("Gemini API Key not found in environment variable GEMINI_API_KEY or appsettings.json");
     }
 
     public async Task<List<BusinessDto>> SearchBusinessesAsync(

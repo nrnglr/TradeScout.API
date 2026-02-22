@@ -151,6 +151,9 @@ public class ScraperController : ControllerBase
                         Language = request.Language
                     };
 
+                    _logger.LogDebug("📝 Business saved to DB: Name={Name}, Email={Email}, Mobile={Mobile}, SocialMedia={SocialMedia}", 
+                        business.BusinessName, business.Email, business.Mobile, business.SocialMedia);
+
                     _context.Businesses.Add(business);
                 }
 
@@ -460,6 +463,9 @@ public class ScraperController : ControllerBase
                         Language = request.Language,
                     };
 
+                    _logger.LogDebug("📝 Business saved to DB: Name={Name}, Email={Email}, Mobile={Mobile}, SocialMedia={SocialMedia}", 
+                        business.BusinessName, business.Email, business.Mobile, business.SocialMedia);
+
                     _context.Businesses.Add(business);
                 }
 
@@ -631,6 +637,9 @@ public class ScraperController : ControllerBase
                         Country = TruncateString(businessDto.Country, 100),
                         Language = request.Language,
                     };
+
+                    _logger.LogDebug("📝 Business saved to DB: Name={Name}, Email={Email}, Mobile={Mobile}, SocialMedia={SocialMedia}", 
+                        business.BusinessName, business.Email, business.Mobile, business.SocialMedia);
 
                     _context.Businesses.Add(business);
                 }

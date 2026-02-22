@@ -8,6 +8,59 @@ using TradeScout.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ===== LOAD ENVIRONMENT VARIABLES =====
+// Load .env file for Development (manual parsing)
+if (builder.Environment.IsDevelopment())
+{
+    // Try multiple paths to find .env file
+    var possiblePaths = new[]
+    {
+        Path.Combine(AppContext.BaseDirectory, "..", "..", ".env"), // From bin/Debug/net9.0
+        Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"), // From TradeScout.API folder
+        Path.Combine(Directory.GetCurrentDirectory(), ".env") // In TradeScout.API folder
+    };
+
+    string? envPath = null;
+    foreach (var path in possiblePaths)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (File.Exists(fullPath))
+        {
+            envPath = fullPath;
+            Console.WriteLine($"✅ .env dosyası bulundu: {fullPath}");
+            break;
+        }
+    }
+
+    if (envPath != null && File.Exists(envPath))
+    {
+        foreach (var line in File.ReadAllLines(envPath))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                continue;
+
+            var parts = line.Split('=');
+            if (parts.Length == 2)
+            {
+                var key = parts[0].Trim();
+                var value = parts[1].Trim();
+                Environment.SetEnvironmentVariable(key, value);
+                
+                // Debug log
+                if (key == "GEMINI_API_KEY")
+                {
+                    Console.WriteLine($"✅ GEMINI_API_KEY yüklendi: {(string.IsNullOrEmpty(value) ? "(boş)" : "****")}");
+                    Console.WriteLine($"   Kontrol: Environment.GetEnvironmentVariable('GEMINI_API_KEY') = {(Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Length ?? 0)} chars");
+                }
+            }
+        }
+    }
+    else
+    {
+        Console.WriteLine("⚠️ .env dosyası bulunamadı");
+    }
+}
+
 // ===== POSTGRESQL CONFIGURATION =====
 // Configure PostgreSQL connection
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
