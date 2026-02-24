@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using TradeScout.API.Data;
 using TradeScout.API.DTOs;
@@ -35,6 +36,7 @@ public class AuthController : ControllerBase
     /// <param name="registerDto">User registration data</param>
     /// <returns>Authentication response with JWT token</returns>
     [HttpPost("register")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -116,6 +118,7 @@ public class AuthController : ControllerBase
     /// <param name="loginDto">User login credentials</param>
     /// <returns>Authentication response with JWT token</returns>
     [HttpPost("login")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

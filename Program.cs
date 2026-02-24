@@ -66,6 +66,14 @@ if (builder.Environment.IsDevelopment())
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
+// Log connection string (mask password)
+var maskedConnectionString = System.Text.RegularExpressions.Regex.Replace(
+    connectionString, 
+    @"Password=[^;]*", 
+    "Password=****"
+);
+Console.WriteLine($"📦 Database Connection: {maskedConnectionString}");
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
@@ -128,22 +136,27 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins(
-                // Development
+        policy
+            .WithOrigins(
+                // Development - localhost
                 "http://localhost:3000",      // React development
+                "http://127.0.0.1:3000",      // React development (127.0.0.1 variant)
                 "http://localhost:5173",      // Vite development
+                "http://127.0.0.1:5173",      // Vite development (127.0.0.1 variant)
                 "http://localhost:4200",      // Angular development
+                "http://127.0.0.1:4200",      // Angular development (127.0.0.1 variant)
                 "http://localhost:3001",      // Alternatif React port
+                "http://127.0.0.1:3001",      // Alternatif React port (127.0.0.1 variant)
                 // Production
                 "https://fgstrade.com",       // Production HTTPS
                 "http://fgstrade.com",        // Production HTTP
                 "https://www.fgstrade.com",   // Production HTTPS with www
                 "http://www.fgstrade.com"     // Production HTTP with www
             )
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials()
-            .SetIsOriginAllowedToAllowWildcardSubdomains();
+            .AllowAnyMethod()                 // GET, POST, PUT, DELETE, OPTIONS, etc.
+            .AllowAnyHeader()                 // Content-Type, Authorization, etc.
+            .AllowCredentials()               // Allow cookies and credentials
+            .WithExposedHeaders("Content-Disposition"); // For file downloads
     });
 });
 
@@ -194,7 +207,13 @@ var app = builder.Build();
 //     });
 // }
 
-// CORS middleware - En üstte olmalı (UseHttpsRedirection'dan önce)
+// ⚠️ Exception Handling - CORS'tan bile önce (en kritik)
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+
+// ⚠️ CORS middleware - Hataların CORS başlıkları kaybetmemesi için erken konumlandı
 app.UseCors("AllowReactApp");
 
 // HTTPS yönlendirmesi (Production'da aktif olmalı)
