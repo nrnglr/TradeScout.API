@@ -20,6 +20,7 @@
     </PackageReference>
     <PackageReference Include="Mscc.GenerativeAI" Version="3.0.2" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+    <PackageReference Include="Resend" Version="0.2.1" />
     <PackageReference Include="Selenium.WebDriver" Version="4.40.0" />
     <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="144.0.7559.13300" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />

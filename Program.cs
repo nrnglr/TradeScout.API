@@ -136,8 +136,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy
-            .WithOrigins(
+        var allowedOrigins = builder.Environment.IsDevelopment()
+            ? new[]
+            {
                 // Development - localhost
                 "http://localhost:3000",      // React development
                 "http://127.0.0.1:3000",      // React development (127.0.0.1 variant)
@@ -146,13 +147,17 @@ builder.Services.AddCors(options =>
                 "http://localhost:4200",      // Angular development
                 "http://127.0.0.1:4200",      // Angular development (127.0.0.1 variant)
                 "http://localhost:3001",      // Alternatif React port
-                "http://127.0.0.1:3001",      // Alternatif React port (127.0.0.1 variant)
+                "http://127.0.0.1:3001"       // Alternatif React port (127.0.0.1 variant)
+            }
+            : new[]
+            {
                 // Production
-                "https://fgstrade.com",       // Production HTTPS
-                "http://fgstrade.com",        // Production HTTP
-                "https://www.fgstrade.com",   // Production HTTPS with www
-                "http://www.fgstrade.com"     // Production HTTP with www
-            )
+                "https://PRODUCTION_DOMAIN",   // Production HTTPS
+                "https://www.PRODUCTION_DOMAIN" // Production HTTPS with www
+            };
+
+        policy
+            .WithOrigins(allowedOrigins)
             .AllowAnyMethod()                 // GET, POST, PUT, DELETE, OPTIONS, etc.
             .AllowAnyHeader()                 // Content-Type, Authorization, etc.
             .AllowCredentials()               // Allow cookies and credentials
@@ -169,8 +174,24 @@ builder.Services.Configure<TradeScout.API.Models.ProxySettings>(
 // Register JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
 
-// Register Email Service
-builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+// Register HTTP Client Factory for Resend API with specific configuration
+builder.Services.AddHttpClient("ResendClient", client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    
+    var resendApiKey = builder.Configuration["EmailSettings:ResendApiKey"];
+    if (!string.IsNullOrEmpty(resendApiKey))
+    {
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {resendApiKey}");
+    }
+});
+
+// Register generic HttpClient
+builder.Services.AddHttpClient();
+
+// Register Resend Email Service
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 
 // Register Proxy Manager
 builder.Services.AddSingleton<ProxyManager>();
@@ -185,7 +206,13 @@ builder.Services.AddScoped<IGeminiSearchService, GeminiSearchService>(); // ✨ 
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 
 // ===== CONTROLLER CONFIGURATION =====
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Allow case-insensitive enum deserialization
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
+    });
 
 // ===== SWAGGER/OPENAPI CONFIGURATION =====
 // Geçici olarak devre dışı - Swagger paket uyumsuzluğu

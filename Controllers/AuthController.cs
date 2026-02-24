@@ -44,10 +44,35 @@ public class AuthController : ControllerBase
     {
         try
         {
+            // Log incoming registration data for debugging
+            _logger.LogInformation("📝 Kayıt talebesi alındı - Email: {Email}, FullName: {FullName}", 
+                registerDto?.Email ?? "NULL", 
+                registerDto?.FullName ?? "NULL");
+
             // Check if model is valid
             if (!ModelState.IsValid)
             {
-                return BadRequest(ModelState);
+                // Log validation errors in detail
+                var errors = ModelState.Values.SelectMany(v => v.Errors).ToList();
+                _logger.LogError("❌ Model Validation Hataları: {ErrorCount} hata", errors.Count);
+                
+                foreach (var error in errors)
+                {
+                    _logger.LogError("   - {ErrorMessage}", error.ErrorMessage);
+                }
+                
+                // Return detailed error response
+                var errorDetails = ModelState
+                    .Where(x => x.Value.Errors.Count > 0)
+                    .ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                    );
+                
+                return BadRequest(new { 
+                    message = "Validation hataları oluştu",
+                    errors = errorDetails 
+                });
             }
 
             // Check if email already exists
