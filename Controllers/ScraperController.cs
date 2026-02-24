@@ -77,8 +77,8 @@ public class ScraperController : ControllerBase
                 return Unauthorized(new { message = "Kullanıcı bulunamadı" });
             }
 
-            // Kredi kontrolü (her işletme 1 kredi)
-            var requiredCredits = request.MaxResults;
+            // Kredi kontrolü (her arama 1 kredi)
+            var requiredCredits = 1;
             if (user.Credits < requiredCredits)
             {
                 return StatusCode(402, new 
@@ -157,8 +157,8 @@ public class ScraperController : ControllerBase
                     _context.Businesses.Add(business);
                 }
 
-                // Kullanıcı kredisini düş
-                var actualCreditsUsed = businesses.Count;
+                // Kullanıcı kredisini düş (her arama 1 kredi, kaç firma bulundğundan bağımsız)
+                var actualCreditsUsed = 1;
                 user.Credits -= actualCreditsUsed;
 
                 // Job'ı güncelle
@@ -381,7 +381,8 @@ public class ScraperController : ControllerBase
             }
 
             // Credit check (Admin users bypass this)
-            var requiredCredits = request.MaxResults;
+            // Her arama için 1 kredi (firma sayısına değil)
+            var requiredCredits = 1;
             if (user.Role != "Admin" && user.Credits < requiredCredits)
             {
                 return StatusCode(402, new 
@@ -470,7 +471,8 @@ public class ScraperController : ControllerBase
                 }
 
                 // Deduct credits (Admin users don't lose credits)
-                var actualCreditsUsed = businesses.Count;
+                // Her arama için sadece 1 kredi düş (kaç firma bulunduğundan bağımsız)
+                var actualCreditsUsed = 1;
                 if (user.Role != "Admin")
                 {
                     user.Credits -= actualCreditsUsed;
@@ -557,7 +559,8 @@ public class ScraperController : ControllerBase
             }
 
             // Credit check (Admin users bypass this)
-            var requiredCredits = request.MaxResults;
+            // Her arama için 1 kredi (firma sayısına değil)
+            var requiredCredits = 1;
             if (user.Role != "Admin" && user.Credits < requiredCredits)
             {
                 return StatusCode(402, new 
@@ -645,7 +648,8 @@ public class ScraperController : ControllerBase
                 }
 
                 // Deduct credits (Admin users don't lose credits)
-                var actualCreditsUsed = businesses.Count;
+                // Her arama için sadece 1 kredi düş (kaç firma bulunduğundan bağımsız)
+                var actualCreditsUsed = 1;
                 if (user.Role != "Admin")
                 {
                     user.Credits -= actualCreditsUsed;

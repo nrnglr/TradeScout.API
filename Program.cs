@@ -156,6 +156,9 @@ builder.Services.Configure<TradeScout.API.Models.ProxySettings>(
 // Register JWT Service
 builder.Services.AddScoped<IJwtService, JwtService>();
 
+// Register Email Service
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
 // Register Proxy Manager
 builder.Services.AddSingleton<ProxyManager>();
 
