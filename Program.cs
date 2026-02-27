@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TradeScout.API.Data;
@@ -8,62 +9,77 @@ using TradeScout.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ===== LOAD ENVIRONMENT VARIABLES =====
-// Load .env file for Development (manual parsing)
-if (builder.Environment.IsDevelopment())
+// ===== KESTREL CONFIGURATION =====
+// Increase request timeout for long-running scraping operations
+builder.WebHost.ConfigureKestrel(serverOptions =>
 {
-    // Try multiple paths to find .env file
-    var possiblePaths = new[]
-    {
-        Path.Combine(AppContext.BaseDirectory, "..", "..", ".env"), // From bin/Debug/net9.0
-        Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"), // From TradeScout.API folder
-        Path.Combine(Directory.GetCurrentDirectory(), ".env") // In TradeScout.API folder
-    };
+    serverOptions.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(10);
+    serverOptions.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5);
+});
 
-    string? envPath = null;
-    foreach (var path in possiblePaths)
-    {
-        var fullPath = Path.GetFullPath(path);
-        if (File.Exists(fullPath))
-        {
-            envPath = fullPath;
-            Console.WriteLine($"✅ .env dosyası bulundu: {fullPath}");
-            break;
-        }
-    }
+// ===== LOAD ENVIRONMENT VARIABLES =====
+// Load .env file (both Development and Production)
+var possiblePaths = new[]
+{
+    Path.Combine(AppContext.BaseDirectory, "..", "..", ".env"), // From bin/Debug/net9.0
+    Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"), // From TradeScout.API folder
+    Path.Combine(Directory.GetCurrentDirectory(), ".env"), // In TradeScout.API folder
+    "/app/.env" // Docker/Production path
+};
 
-    if (envPath != null && File.Exists(envPath))
+string? envPath = null;
+foreach (var path in possiblePaths)
+{
+    var fullPath = Path.GetFullPath(path);
+    if (File.Exists(fullPath))
     {
-        foreach (var line in File.ReadAllLines(envPath))
-        {
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
-                continue;
-
-            var parts = line.Split('=');
-            if (parts.Length == 2)
-            {
-                var key = parts[0].Trim();
-                var value = parts[1].Trim();
-                Environment.SetEnvironmentVariable(key, value);
-                
-                // Debug log
-                if (key == "GEMINI_API_KEY")
-                {
-                    Console.WriteLine($"✅ GEMINI_API_KEY yüklendi: {(string.IsNullOrEmpty(value) ? "(boş)" : "****")}");
-                    Console.WriteLine($"   Kontrol: Environment.GetEnvironmentVariable('GEMINI_API_KEY') = {(Environment.GetEnvironmentVariable("GEMINI_API_KEY")?.Length ?? 0)} chars");
-                }
-            }
-        }
-    }
-    else
-    {
-        Console.WriteLine("⚠️ .env dosyası bulunamadı");
+        envPath = fullPath;
+        Console.WriteLine($"✅ .env dosyası bulundu: {fullPath}");
+        break;
     }
 }
 
+if (envPath != null && File.Exists(envPath))
+{
+    foreach (var line in File.ReadAllLines(envPath))
+    {
+        if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+            continue;
+
+        var eqIndex = line.IndexOf('=');
+        if (eqIndex > 0)
+        {
+            var key = line.Substring(0, eqIndex).Trim();
+            var value = line.Substring(eqIndex + 1).Trim();
+            
+            // Remove quotes if present
+            if ((value.StartsWith("\"") && value.EndsWith("\"")) || 
+                (value.StartsWith("'") && value.EndsWith("'")))
+            {
+                value = value.Substring(1, value.Length - 2);
+            }
+            
+            Environment.SetEnvironmentVariable(key, value);
+            
+            // Mask sensitive values in log
+            var maskedValue = key.Contains("KEY", StringComparison.OrdinalIgnoreCase) || 
+                              key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
+                              key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
+                ? "****" 
+                : value;
+            Console.WriteLine($"✅ ENV: {key} = {maskedValue}");
+        }
+    }
+}
+else
+{
+    Console.WriteLine("⚠️ .env dosyası bulunamadı - Environment variables kullanılacak");
+}
+
 // ===== POSTGRESQL CONFIGURATION =====
-// Configure PostgreSQL connection
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+// Configure PostgreSQL connection - Environment variable'dan veya appsettings'den
+var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL") 
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 // Log connection string (mask password)
@@ -142,12 +158,14 @@ builder.Services.AddCors(options =>
                 // Development - localhost
                 "http://localhost:3000",      // React development
                 "http://127.0.0.1:3000",      // React development (127.0.0.1 variant)
+                "http://localhost:3001",      // Alternatif React port
+                "http://127.0.0.1:3001",      // Alternatif React port (127.0.0.1 variant)
+                "http://localhost:3002",      // Alternatif React port 2
+                "http://127.0.0.1:3002",      // Alternatif React port 2 (127.0.0.1 variant)
                 "http://localhost:5173",      // Vite development
                 "http://127.0.0.1:5173",      // Vite development (127.0.0.1 variant)
                 "http://localhost:4200",      // Angular development
-                "http://127.0.0.1:4200",      // Angular development (127.0.0.1 variant)
-                "http://localhost:3001",      // Alternatif React port
-                "http://127.0.0.1:3001"       // Alternatif React port (127.0.0.1 variant)
+                "http://127.0.0.1:4200"       // Angular development (127.0.0.1 variant)
             }
             : new[]
             {

@@ -1,0 +1,34 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "DefaultConnection": "${DATABASE_URL}"
+  },
+  "JwtSettings": {
+    "SecretKey": "${JWT_SECRET_KEY}",
+    "Issuer": "TradeScout.API",
+    "Audience": "TradeScout.Client",
+    "ExpirationMinutes": "1440"
+  },
+  "GeminiSettings": {
+    "ApiKey": "${GEMINI_API_KEY}",
+    "ApiKeys": []
+  },
+  "EmailSettings": {
+    "ResendApiKey": "${RESEND_API_KEY}",
+    "FromEmail": "noreply@fgstrade.com",
+    "AdminEmail": "info@fgstrade.com"
+  },
+  "ProxySettings": {
+    "EnableProxy": false,
+    "RotationType": "RoundRobin",
+    "TestProxiesOnStartup": false,
+    "ProxyTimeout": 10,
+    "Proxies": []
+  }
+}

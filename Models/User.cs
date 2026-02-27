@@ -72,7 +72,7 @@ public class User
 
     [Required]
     [Column("MaxResultsPerSearch")]
-    public int MaxResultsPerSearch { get; set; } = 10;
+    public int MaxResultsPerSearch { get; set; } = 200; // Varsayılan 200 firma
 
     [Required]
     [Column("PackageType")]

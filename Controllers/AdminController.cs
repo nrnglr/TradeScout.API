@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TradeScout.API.Data;
+using TradeScout.API.Services;
 
 namespace TradeScout.API.Controllers;
 
@@ -16,11 +17,16 @@ public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<AdminController> _logger;
+    private readonly IGeminiSearchService _geminiService;
 
-    public AdminController(ApplicationDbContext context, ILogger<AdminController> logger)
+    public AdminController(
+        ApplicationDbContext context, 
+        ILogger<AdminController> logger,
+        IGeminiSearchService geminiService)
     {
         _context = context;
         _logger = logger;
+        _geminiService = geminiService;
     }
 
     /// <summary>
@@ -120,6 +126,54 @@ public class AdminController : ControllerBase
         {
             _logger.LogError(ex, "Admin güncellemesi sırasında hata");
             return StatusCode(500, new { message = "Güncelleme sırasında hata oluştu", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get Gemini API key pool status (admin only)
+    /// Shows total keys and available keys for load balancing
+    /// </summary>
+    [HttpGet("api-key-status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public ActionResult<object> GetApiKeyPoolStatus()
+    {
+        try
+        {
+            // Check if user is admin
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+            if (userRole != "Admin")
+            {
+                return Forbid();
+            }
+
+            var (totalKeys, availableKeys) = _geminiService.GetApiKeyPoolStatus();
+            
+            // Calculate capacity
+            var maxRequestsPerMinute = totalKeys * 50; // 50 requests per key per minute (conservative)
+            var estimatedConcurrentUsers = maxRequestsPerMinute / 2; // Each user ~2 requests
+
+            return Ok(new
+            {
+                status = "✅ API Key Pool Active",
+                totalKeys,
+                availableKeys,
+                usedKeys = totalKeys - availableKeys,
+                capacity = new
+                {
+                    maxRequestsPerMinute,
+                    estimatedConcurrentUsers,
+                    recommendation = totalKeys < 5 
+                        ? "⚠️ 200+ kullanıcı için en az 5 API key eklemeniz önerilir"
+                        : "✅ Yeterli API key mevcut"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "API key durumu alınamadı");
+            return StatusCode(500, new { message = "API key durumu alınamadı", error = ex.Message });
         }
     }
 

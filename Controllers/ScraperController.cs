@@ -171,12 +171,27 @@ public class ScraperController : ControllerBase
 
                 _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
 
+                // Response mesajını oluştur - az firma bulunursa kullanıcıya bilgi ver
+                string responseMessage;
+                if (businesses.Count == 0)
+                {
+                    responseMessage = "Bu bölgede işletme bulunamadı.";
+                }
+                else if (businesses.Count < request.MaxResults)
+                {
+                    responseMessage = $"{businesses.Count} işletme bulundu (hedef: {request.MaxResults}). Bu bölgede daha fazla işletme bulunamadı.";
+                }
+                else
+                {
+                    responseMessage = $"Başarıyla {businesses.Count} işletme bulundu ve kaydedildi.";
+                }
+
                 // Response oluştur
                 var response = new ScrapeResponseDto
                 {
                     JobId = job.Id,
                     Status = "Completed",
-                    Message = $"Başarıyla {businesses.Count} işletme bulundu ve kaydedildi.",
+                    Message = responseMessage,
                     TotalResults = businesses.Count,
                     CreditsUsed = actualCreditsUsed,
                     Businesses = businesses,
@@ -265,7 +280,17 @@ public class ScraperController : ControllerBase
             // Excel oluştur
             var excelBytes = _excelService.ExportToExcel(businessDtos, job.Category, job.City);
 
-            var fileName = $"TradeScout_{job.Category}_{job.City}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            // Dosya adı için güvenli karakterler kullan (özel karakterleri temizle)
+            var safeCategory = SanitizeFileName(job.Category ?? "data");
+            var safeCity = SanitizeFileName(job.City ?? "");
+            var safeCountry = SanitizeFileName(job.Country ?? "");
+            
+            // Dosya adı formatı: TradeScout_Kategori_Şehir_Ülke_Tarih.xlsx
+            var locationPart = string.IsNullOrEmpty(safeCountry) 
+                ? safeCity 
+                : $"{safeCity}_{safeCountry}";
+            
+            var fileName = $"TradeScout_{safeCategory}_{locationPart}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
 
             return File(excelBytes, 
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
@@ -524,6 +549,8 @@ public class ScraperController : ControllerBase
 
     /// <summary>
     /// ULTRA-FAST scraping with Gemini AI + Google Search Tool
+    /// Uses batched processing (15 per batch) to prevent 504 Gateway Timeout
+    /// Smart credit deduction: only charges for successfully enriched records
     /// </summary>
     [HttpPost("scrape-gemini")]
     [ProducesResponseType(typeof(ScrapeResponseDto), StatusCodes.Status200OK)]
@@ -558,15 +585,14 @@ public class ScraperController : ControllerBase
                 return Unauthorized(new { message = "Kullanıcı bulunamadı" });
             }
 
-            // Credit check (Admin users bypass this)
-            // Her arama için 1 kredi (firma sayısına değil)
-            var requiredCredits = 1;
-            if (user.Role != "Admin" && user.Credits < requiredCredits)
+            // ⚠️ SMART CREDIT CHECK: Check minimum credits (at least 1)
+            // Actual deduction will be based on successful results at the END
+            if (user.Role != "Admin" && user.Credits < 1)
             {
                 return StatusCode(402, new 
                 { 
-                    message = $"Yetersiz kredi. Gerekli: {requiredCredits}, Mevcut: {user.Credits}",
-                    requiredCredits,
+                    message = $"Yetersiz kredi. En az 1 kredi gerekli, Mevcut: {user.Credits}",
+                    requiredCredits = 1,
                     availableCredits = user.Credits
                 });
             }
@@ -575,17 +601,17 @@ public class ScraperController : ControllerBase
             var city = request.City ?? "";
 
             // Validate MaxResults for non-admin users
-            if (user.Role != "Admin" && request.MaxResults > 10)
+            if (user.Role != "Admin" && request.MaxResults > user.MaxResultsPerSearch)
             {
                 return BadRequest(new
                 {
-                    message = "Maksimum 10 firma talebinde bulunabilirsiniz. Admin için limit yoktur.",
-                    maxAllowed = 10,
+                    message = $"Maksimum {user.MaxResultsPerSearch} firma talebinde bulunabilirsiniz.",
+                    maxAllowed = user.MaxResultsPerSearch,
                     requested = request.MaxResults
                 });
             }
 
-            _logger.LogInformation("🤖 GEMINI AI Scraping isteği alındı: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
+            _logger.LogInformation("🤖 GEMINI AI Scraping başlatılıyor: UserId={UserId}, Category={Category}, City={City}, MaxResults={MaxResults}", 
                 userId, category, city, request.MaxResults);
 
             // Create scraping job
@@ -605,21 +631,34 @@ public class ScraperController : ControllerBase
 
             try
             {
-                // GEMINI AI scraping with Google Search
+                // STEP 1: GEMINI AI search to find businesses
+                // NOTE: Using CancellationToken.None to prevent client disconnect from cancelling the operation
+                _logger.LogInformation("📍 STEP 1: Gemini AI ile firma arama başlatılıyor...");
                 var businesses = await _geminiSearchService.SearchBusinessesAsync(
                     category,
                     city,
                     request.Country,
                     request.MaxResults,
-                    HttpContext.RequestAborted
+                    CancellationToken.None // Don't use HttpContext.RequestAborted - let operation complete
                 );
 
-                _logger.LogInformation("✅ GEMINI AI Scraping tamamlandı: {Count} işletme bulundu", businesses.Count);
+                _logger.LogInformation("✅ STEP 1 tamamlandı: {Count} firma bulundu", businesses.Count);
+
+                // STEP 2: BATCHED ENRICHMENT (60 per batch to prevent 504 timeout)
+                _logger.LogInformation("📧 STEP 2: Batched enrichment başlatılıyor ({Count} firma, 60'lık batch)...", businesses.Count);
+                
+                var (enrichedBusinesses, successfulCount) = await _geminiSearchService.EnrichBusinessesAsync(
+                    businesses,
+                    batchSize: 60,
+                    CancellationToken.None // Don't use HttpContext.RequestAborted - let operation complete
+                );
+
+                _logger.LogInformation("✅ STEP 2 tamamlandı: {SuccessCount}/{TotalCount} firma zenginleştirildi", 
+                    successfulCount, enrichedBusinesses.Count);
 
                 // Save to database
-                foreach (var businessDto in businesses)
+                foreach (var businessDto in enrichedBusinesses)
                 {
-                    // 🔧 FIX: Truncate long values to fit database constraints
                     var business = new Business
                     {
                         UserId = userId,
@@ -641,51 +680,85 @@ public class ScraperController : ControllerBase
                         Language = request.Language,
                     };
 
-                    _logger.LogDebug("📝 Business saved to DB: Name={Name}, Email={Email}, Mobile={Mobile}, SocialMedia={SocialMedia}", 
-                        business.BusinessName, business.Email, business.Mobile, business.SocialMedia);
-
                     _context.Businesses.Add(business);
                 }
 
-                // Deduct credits (Admin users don't lose credits)
-                // Her arama için sadece 1 kredi düş (kaç firma bulunduğundan bağımsız)
-                var actualCreditsUsed = 1;
+                // ✅ SMART CREDIT DEDUCTION (at the END, only for successful enrichments)
+                // Only deduct credits for records with valid Email or Mobile (not "Not Found")
+                var actualCreditsUsed = 0;
                 if (user.Role != "Admin")
                 {
+                    // 1 credit per successful enrichment, minimum 1 credit for the search
+                    actualCreditsUsed = Math.Max(1, successfulCount);
+                    
+                    // Don't deduct more than user has
+                    actualCreditsUsed = Math.Min(actualCreditsUsed, user.Credits);
+                    
                     user.Credits -= actualCreditsUsed;
+                    
+                    _logger.LogInformation("💳 Kredi düşüldü: {CreditsUsed} ({SuccessCount} başarılı kayıt için)", 
+                        actualCreditsUsed, successfulCount);
                 }
 
                 // Update job
-                job.Status = "Completed";
-                job.TotalResults = businesses.Count;
-                job.CreditsUsed = user.Role == "Admin" ? 0 : actualCreditsUsed;
+                job.Status = enrichedBusinesses.Count > 0 ? "Completed" : "NoResults";
+                job.TotalResults = enrichedBusinesses.Count;
+                job.CreditsUsed = actualCreditsUsed;
                 job.CompletedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
+                _logger.LogInformation("🎉 GEMINI AI Scraping tamamlandı! Toplam: {Total}, Zenginleştirildi: {Enriched}, Kredi: {Credits}", 
+                    enrichedBusinesses.Count, successfulCount, actualCreditsUsed);
 
                 // Response
+                // Generate appropriate message based on results
+                string message;
+                if (enrichedBusinesses.Count == 0)
+                {
+                    message = $"⚠️ Bu bölgede '{category}' sektöründe işletme bulunamadı. Farklı bir arama deneyin.";
+                }
+                else if (enrichedBusinesses.Count < request.MaxResults)
+                {
+                    message = $"🤖 Bu bölgede {enrichedBusinesses.Count} işletme bulundu (hedef: {request.MaxResults}). {successfulCount} tanesi zenginleştirildi.";
+                }
+                else
+                {
+                    message = $"🤖 Gemini AI ile {enrichedBusinesses.Count} işletme bulundu, {successfulCount} tanesi başarıyla zenginleştirildi!";
+                }
+
                 var response = new ScrapeResponseDto
                 {
                     JobId = job.Id,
-                    Status = "Completed",
-                    Message = $"🤖 Gemini AI ile {businesses.Count} işletme bulundu ve kaydedildi!",
-                    TotalResults = businesses.Count,
+                    Status = enrichedBusinesses.Count > 0 ? "Completed" : "NoResults",
+                    Message = message,
+                    TotalResults = enrichedBusinesses.Count,
                     CreditsUsed = actualCreditsUsed,
-                    Businesses = businesses,
-                    DownloadUrl = $"/api/scraper/download/{job.Id}"
+                    Businesses = enrichedBusinesses,
+                    DownloadUrl = enrichedBusinesses.Count > 0 ? $"/api/scraper/download/{job.Id}" : null
                 };
 
                 return Ok(response);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("⚠️ GEMINI AI Scraping timeout (işlem çok uzun sürdü)");
+                
+                job.Status = "Timeout";
+                job.ErrorMessage = "İşlem zaman aşımına uğradı";
+                job.CompletedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(408, new { message = "İşlem zaman aşımına uğradı. Daha az firma ile tekrar deneyin." });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ GEMINI AI Scraping hatası");
 
-                // Mark job as failed
+                // Mark job as failed (NO credit deduction on error!)
                 job.Status = "Failed";
-                job.ErrorMessage = TruncateString(ex.Message, 1000); // ✅ Truncate error message
+                job.ErrorMessage = TruncateString(ex.Message, 1000);
+                job.CreditsUsed = 0; // No credits used on failure
                 job.CompletedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
@@ -709,4 +782,143 @@ public class ScraperController : ControllerBase
 
         return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
+
+    /// <summary>
+    /// Helper method to sanitize file names (remove invalid characters)
+    /// </summary>
+    private static string SanitizeFileName(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return "unknown";
+
+        // Türkçe karakterleri dönüştür
+        var result = input
+            .Replace("ı", "i")
+            .Replace("İ", "I")
+            .Replace("ğ", "g")
+            .Replace("Ğ", "G")
+            .Replace("ü", "u")
+            .Replace("Ü", "U")
+            .Replace("ş", "s")
+            .Replace("Ş", "S")
+            .Replace("ö", "o")
+            .Replace("Ö", "O")
+            .Replace("ç", "c")
+            .Replace("Ç", "C");
+
+        // Geçersiz dosya karakterlerini kaldır
+        var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+        foreach (var c in invalidChars)
+        {
+            result = result.Replace(c.ToString(), "");
+        }
+
+        // Boşlukları alt çizgi yap
+        result = result.Replace(" ", "_");
+
+        // Birden fazla alt çizgiyi teke indir
+        while (result.Contains("__"))
+        {
+            result = result.Replace("__", "_");
+        }
+
+        return result.Trim('_');
+    }
+
+    /// <summary>
+    /// Kullanıcının geçmiş aramalarını getir
+    /// </summary>
+    [HttpGet("my-jobs")]
+    [ProducesResponseType(typeof(List<UserJobDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<List<UserJobDto>>> GetMyJobs([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        try
+        {
+            // Kullanıcı ID'sini JWT token'dan al
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Geçersiz kullanıcı token'ı" });
+            }
+
+            // Kullanıcının BAŞARILI job'larını getir (en yeni en üstte, Failed olanlar hariç)
+            var jobs = await _context.ScrapingJobs
+                .Where(j => j.UserId == userId && j.Status == "Completed")
+                .OrderByDescending(j => j.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(j => new UserJobDto
+                {
+                    JobId = j.Id,
+                    Category = j.Category,
+                    City = j.City,
+                    Country = j.Country ?? "",
+                    Language = j.Language,
+                    Status = j.Status,
+                    TotalResults = j.TotalResults,
+                    CreditsUsed = j.CreditsUsed,
+                    CreatedAt = j.CreatedAt,
+                    CompletedAt = j.CompletedAt
+                })
+                .ToListAsync();
+
+            return Ok(jobs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Kullanıcı job'ları getirme hatası");
+            return StatusCode(500, new { message = "Bir hata oluştu" });
+        }
+    }
+
+    /// <summary>
+    /// Kullanıcının toplam arama sayısını getir
+    /// </summary>
+    [HttpGet("my-jobs/count")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult> GetMyJobsCount()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Geçersiz kullanıcı token'ı" });
+            }
+
+            var totalCount = await _context.ScrapingJobs
+                .Where(j => j.UserId == userId)
+                .CountAsync();
+
+            var completedCount = await _context.ScrapingJobs
+                .Where(j => j.UserId == userId && j.Status == "Completed")
+                .CountAsync();
+
+            return Ok(new { total = totalCount, completed = completedCount });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Job sayısı getirme hatası");
+            return StatusCode(500, new { message = "Bir hata oluştu" });
+        }
+    }
+}
+
+/// <summary>
+/// DTO for user's job history
+/// </summary>
+public class UserJobDto
+{
+    public int JobId { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string Country { get; set; } = string.Empty;
+    public string Language { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int TotalResults { get; set; }
+    public int CreditsUsed { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }

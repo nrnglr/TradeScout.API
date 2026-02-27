@@ -54,10 +54,14 @@ bld/
 *.db-shm
 *.db-wal
 
-# Sensitive files
+# Sensitive files - API KEYS, SECRETS
+appsettings.json
 appsettings.Development.json
 appsettings.Production.json
+appsettings.*.json
+!appsettings.json.template
 *.env
+.env*
 
 # NuGet Packages
 *.nupkg
