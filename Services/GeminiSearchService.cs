@@ -356,7 +356,7 @@ Use Google Search with the sector and location provided by the user to collect t
 
 SECTOR: {variant}{sector}
 LOCATION: {location}
-TARGET: Find {targetCount} DIFFERENT businesses (batch {batchIndex + 1}, offset {offset})
+TARGET: Find EXACTLY {targetCount} businesses. Be thorough and exhaustive. Use multiple search strategies: business directories, Google Maps, yellow pages, LinkedIn company pages, local chamber of commerce listings.
 
 STRATEGY:
 1. Search for ""{variant}{sector} in {location}"" on Google

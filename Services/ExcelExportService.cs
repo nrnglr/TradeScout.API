@@ -16,12 +16,14 @@ public class ExcelExportService : IExcelExportService
     public byte[] ExportToExcel(List<BusinessDto> businesses, string category, string city)
     {
         using var workbook = new XLWorkbook();
-        // Sheet name maksimum 31 karakter olabilir
+        // Sheet name maksimum 31 karakter olabilir ve geçersiz karakterler temizlenmeli
         var sheetName = $"{category} - {city}";
-        if (sheetName.Length > 31)
-        {
-            sheetName = sheetName.Substring(0, 31);
-        }
+        sheetName = sheetName.Trim('\'').Trim();
+        // Excel'de geçersiz karakterleri kaldır: \ / ? * [ ]
+        sheetName = System.Text.RegularExpressions.Regex.Replace(sheetName, @"[\\\/\?\*\[\]:]", "");
+        if (sheetName.Length > 31) sheetName = sheetName.Substring(0, 31);
+        if (string.IsNullOrWhiteSpace(sheetName)) sheetName = "Data";
+        
         var worksheet = workbook.Worksheets.Add(sheetName);
 
         // Header'ları oluştur (İngilizce)
