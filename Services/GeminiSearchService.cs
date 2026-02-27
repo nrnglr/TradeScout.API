@@ -206,29 +206,71 @@ public class GeminiSearchService : IGeminiSearchService
         int maxResults,
         CancellationToken cancellationToken = default)
     {
-        // IGNORE the incoming cancellationToken - we manage our own timeout
-        // This prevents client disconnect from cancelling the operation
-        
         try
         {
             _logger.LogInformation("🤖 Gemini AI Search başlatılıyor: {Sector} - {City}, Hedef: {MaxResults}", 
                 sector, city, maxResults);
 
-            var startTime = DateTime.UtcNow;
-
-            // Build search prompt
             var location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
-            var prompt = BuildSearchPrompt(sector, location, maxResults);
+            
+            // 50'den fazla ise paralel istekler yap
+            int batchSize = 50;
+            int batchCount = (int)Math.Ceiling((double)maxResults / batchSize);
+            batchCount = Math.Min(batchCount, 5); // Max 5 paralel istek
+            
+            _logger.LogInformation("📦 {BatchCount} paralel istek yapılacak (batch size: {BatchSize})", 
+                batchCount, batchSize);
+            
+            var tasks = new List<Task<List<BusinessDto>>>();
+            
+            for (int i = 0; i < batchCount; i++)
+            {
+                int offset = i * batchSize;
+                int targetCount = Math.Min(batchSize, maxResults - offset);
+                var prompt = BuildSearchPromptWithOffset(sector, location, targetCount, offset, i);
+                tasks.Add(CallGeminiApiAsync(prompt, sector, city, country, i));
+            }
+            
+            var results = await Task.WhenAll(tasks);
+            
+            // Sonuçları birleştir ve duplicate'leri kaldır
+            var allBusinesses = results
+                .SelectMany(x => x)
+                .GroupBy(b => b.BusinessName?.ToLower()?.Trim())
+                .Where(g => !string.IsNullOrEmpty(g.Key))
+                .Select(g => g.First())
+                .Take(maxResults)
+                .ToList();
 
-            _logger.LogInformation("📝 Gemini Prompt created (MaxResults: {MaxResults})", maxResults);
+            _logger.LogInformation("🎉 Toplam {Count} benzersiz işletme bulundu (hedef: {MaxResults})", 
+                allBusinesses.Count, maxResults);
+            return allBusinesses;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Gemini Search hatası");
+            throw;
+        }
+    }
 
+    /// <summary>
+    /// Tek bir Gemini API çağrısı yapar
+    /// </summary>
+    private async Task<List<BusinessDto>> CallGeminiApiAsync(
+        string prompt, 
+        string sector, 
+        string city, 
+        string? country,
+        int batchIndex)
+    {
+        try
+        {
             // Get next available API key from pool (load balancing)
             var apiKey = GetNextApiKey();
             var keyIndex = _apiKeys.IndexOf(apiKey);
             
-            // Use direct HTTP API call (v1beta API)
             var httpClient = _httpClientFactory.CreateClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(5); // 5 minute timeout for large requests
+            httpClient.Timeout = TimeSpan.FromMinutes(3);
             
             var apiUrl = $"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={apiKey}";
             
@@ -252,19 +294,18 @@ public class GeminiSearchService : IGeminiSearchService
                 "application/json"
             );
 
-            _logger.LogInformation("🤖 Calling Gemini API (key #{KeyIndex}) for {MaxResults} businesses...", keyIndex, maxResults);
+            _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex})...", 
+                batchIndex, keyIndex);
             
-            // NO cancellation token - let the request complete regardless of client state
             var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
             var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
             if (!httpResponse.IsSuccessStatusCode)
             {
-                _logger.LogError("❌ Gemini API Error: {Content}", responseContent);
-                throw new Exception($"Gemini API failed: {responseContent}");
+                _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}", 
+                    batchIndex, responseContent);
+                return new List<BusinessDto>();
             }
-
-            _logger.LogInformation("✅ Gemini API response received");
 
             // Parse response
             var jsonResponse = JsonDocument.Parse(responseContent);
@@ -277,27 +318,84 @@ public class GeminiSearchService : IGeminiSearchService
 
             if (string.IsNullOrEmpty(text))
             {
-                _logger.LogWarning("⚠️ Gemini AI boş yanıt döndü");
+                _logger.LogWarning("⚠️ Batch #{BatchIndex} - Boş yanıt", batchIndex);
                 return new List<BusinessDto>();
             }
 
-            _logger.LogInformation("✅ Gemini AI yanıt alındı. Parsing ediliyor...");
-            _logger.LogDebug("📄 Raw Response: {Response}", text);
-
-            // Parse JSON response
             var businesses = ParseGeminiResponse(text, sector, city, country);
-
-            var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("🎉 Gemini Search tamamlandı! {Count} işletme bulundu, Süre: {Duration:ss} saniye", 
-                businesses.Count, duration);
-
-            return businesses.Take(maxResults).ToList();
+            _logger.LogInformation("✅ Batch #{BatchIndex} - {Count} işletme bulundu", 
+                batchIndex, businesses.Count);
+            
+            return businesses;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Gemini Search hatası");
-            throw;
+            _logger.LogError(ex, "❌ Batch #{BatchIndex} hatası", batchIndex);
+            return new List<BusinessDto>();
         }
+    }
+
+    /// <summary>
+    /// Offset'li arama prompt'u oluşturur (farklı sonuçlar için)
+    /// </summary>
+    private string BuildSearchPromptWithOffset(string sector, string location, int targetCount, int offset, int batchIndex)
+    {
+        var searchVariants = new[]
+        {
+            "", // İlk batch: normal arama
+            "lesser known ", // 2. batch: daha az bilinen
+            "new ", // 3. batch: yeni
+            "small ", // 4. batch: küçük
+            "local " // 5. batch: yerel
+        };
+        
+        var variant = searchVariants[Math.Min(batchIndex, searchVariants.Length - 1)];
+        
+        return $@"TASK: You are the data collection engine of ""TradeScout"" professional market research software. 
+Use Google Search with the sector and location provided by the user to collect the latest business data.
+
+SECTOR: {variant}{sector}
+LOCATION: {location}
+TARGET: Find {targetCount} DIFFERENT businesses (batch {batchIndex + 1}, offset {offset})
+
+STRATEGY:
+1. Search for ""{variant}{sector} in {location}"" on Google
+2. Find DIFFERENT businesses than typical/famous ones
+3. Select real, active, and current businesses
+4. Find contact information: phone, address, website, email
+5. Identify social media profiles (LinkedIn, Instagram, Facebook, etc.)
+6. Include rating and review count if available
+7. Return whatever you find, even if less than target
+
+IMPORTANT: This is batch {batchIndex + 1}. Find DIFFERENT businesses than the main/popular ones!
+
+FORMATTING RULES (CRITICAL):
+- Return ONLY the JSON format below
+- Do NOT add any explanation or text before/after
+- If absolutely no data found, return empty array []
+- Ensure JSON is valid
+- Set missing fields to null (NOT empty string!)
+
+JSON STRUCTURE:
+[
+  {{
+    ""businessName"": ""Company Name"",
+    ""address"": ""Full Address (Street, No, City, Postal Code)"",
+    ""phone"": ""Phone Number or null"",
+    ""mobile"": ""Mobile Number or null"",
+    ""email"": ""Email Address or null"",
+    ""website"": ""Website URL or null"",
+    ""socialMedia"": ""LinkedIn/Instagram/Facebook URL or null"",
+    ""comments"": ""Brief company info (sector, employees, etc) or null"",
+    ""rating"": 4.5,
+    ""reviewCount"": 120,
+    ""category"": ""{sector}"",
+    ""city"": ""{location.Split(',')[0].Trim()}"",
+    ""country"": ""{(location.Contains(",") ? location.Split(',')[1].Trim() : "Turkey")}""
+  }}
+]
+
+IMPORTANT: Return ONLY the JSON array, nothing else!";
     }
 
     private string BuildSearchPrompt(string sector, string location, int maxResults)
