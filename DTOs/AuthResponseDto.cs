@@ -12,3 +12,13 @@ public class AuthResponseDto
     public string Role { get; set; } = string.Empty;
     public string PackageType { get; set; } = string.Empty;
 }
+public class GoogleLoginRequest
+{
+    public string AccessToken { get; set; }
+}
+public class GoogleUserInfo
+{
+    public string Email { get; set; }
+    public string Name { get; set; }
+    public string Picture { get; set; }
+}

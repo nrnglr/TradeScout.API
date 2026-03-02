@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Mail;
 using Resend;
 
 namespace TradeScout.API.Services;
@@ -9,6 +11,261 @@ public interface IEmailService
 {
     Task<bool> SendEmailAsync(string recipientEmail, string subject, string htmlBody);
     Task<bool> SendFeedbackEmailAsync(string senderName, string senderEmail, string senderPhone, string subject, string message, string feedbackType);
+}
+
+/// <summary>
+/// SMTP Email service implementation for Natro or any SMTP provider
+/// </summary>
+public class SmtpEmailService : IEmailService
+{
+    private readonly string _smtpHost;
+    private readonly int _smtpPort;
+    private readonly string _smtpUsername;
+    private readonly string _smtpPassword;
+    private readonly string _fromEmail;
+    private readonly string _fromName;
+    private readonly string _adminEmail;
+    private readonly bool _enableSsl;
+    private readonly ILogger<SmtpEmailService> _logger;
+    private readonly bool _isConfigured;
+
+    public SmtpEmailService(
+        IConfiguration configuration,
+        ILogger<SmtpEmailService> logger)
+    {
+        _logger = logger;
+        
+        // Load SMTP settings from environment variables first, then appsettings
+        _smtpHost = Environment.GetEnvironmentVariable("SMTP_HOST") 
+            ?? configuration["SmtpSettings:Host"] 
+            ?? "";
+        
+        var portStr = Environment.GetEnvironmentVariable("SMTP_PORT") 
+            ?? configuration["SmtpSettings:Port"] 
+            ?? "587";
+        _smtpPort = int.TryParse(portStr, out var port) ? port : 587;
+        
+        _smtpUsername = Environment.GetEnvironmentVariable("SMTP_USERNAME") 
+            ?? configuration["SmtpSettings:Username"] 
+            ?? "";
+        
+        _smtpPassword = Environment.GetEnvironmentVariable("SMTP_PASSWORD") 
+            ?? configuration["SmtpSettings:Password"] 
+            ?? "";
+        
+        _fromEmail = Environment.GetEnvironmentVariable("SMTP_FROM_EMAIL") 
+            ?? configuration["SmtpSettings:FromEmail"] 
+            ?? "info@fgstrade.com";
+        
+        _fromName = Environment.GetEnvironmentVariable("SMTP_FROM_NAME") 
+            ?? configuration["SmtpSettings:FromName"] 
+            ?? "TradeScout";
+        
+        _adminEmail = configuration["EmailSettings:AdminEmail"] ?? "info@fgstrade.com";
+        
+        var enableSslStr = Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL") 
+            ?? configuration["SmtpSettings:EnableSsl"] 
+            ?? "true";
+        _enableSsl = enableSslStr.ToLower() == "true";
+        
+        // Check if configured
+        _isConfigured = !string.IsNullOrEmpty(_smtpHost) 
+            && !string.IsNullOrEmpty(_smtpUsername) 
+            && !string.IsNullOrEmpty(_smtpPassword)
+            && _smtpPassword != "YOUR_NATRO_EMAIL_PASSWORD_HERE";
+        
+        if (_isConfigured)
+        {
+            _logger.LogInformation("✅ SMTP Email Service initialized: {Host}:{Port}, From: {FromName} <{FromEmail}>", 
+                _smtpHost, _smtpPort, _fromName, _fromEmail);
+        }
+        else
+        {
+            _logger.LogWarning("⚠️ SMTP not configured properly. Emails will be logged but not sent. Check .env or appsettings.json");
+        }
+    }
+
+    /// <summary>
+    /// Send email via SMTP
+    /// </summary>
+    public async Task<bool> SendEmailAsync(string recipientEmail, string subject, string htmlBody)
+    {
+        try
+        {
+            // If not configured, just log and return success (dev mode)
+            if (!_isConfigured)
+            {
+                _logger.LogInformation("📧 [DEV MODE - SMTP] Email would be sent to: {RecipientEmail}, Subject: {Subject}", recipientEmail, subject);
+                return true;
+            }
+
+            using var smtpClient = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
+                EnableSsl = _enableSsl,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Timeout = 30000 // 30 seconds
+            };
+
+            var fromAddress = new MailAddress(_fromEmail, _fromName);
+            var toAddress = new MailAddress(recipientEmail);
+
+            using var mailMessage = new MailMessage(fromAddress, toAddress)
+            {
+                Subject = subject,
+                Body = htmlBody,
+                IsBodyHtml = true
+            };
+
+            await smtpClient.SendMailAsync(mailMessage);
+            _logger.LogInformation("✅ SMTP Email başarıyla gönderildi: {RecipientEmail}", recipientEmail);
+            return true;
+        }
+        catch (SmtpException ex)
+        {
+            _logger.LogError(ex, "❌ SMTP Email gönderme hatası - {RecipientEmail}: {StatusCode} - {Message}", 
+                recipientEmail, ex.StatusCode, ex.Message);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Email gönderme hatası: {RecipientEmail}", recipientEmail);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Send feedback email via SMTP
+    /// </summary>
+    public async Task<bool> SendFeedbackEmailAsync(
+        string senderName,
+        string senderEmail,
+        string? senderPhone,
+        string subject,
+        string message,
+        string? feedbackType)
+    {
+        try
+        {
+            // If not configured, just log and return success (dev mode)
+            if (!_isConfigured)
+            {
+                _logger.LogInformation("📧 [DEV MODE - SMTP] Feedback emails would be sent - From: {SenderEmail}, Subject: {Subject}", senderEmail, subject);
+                return true;
+            }
+
+            // 1. Send to Admin
+            var adminBodyHtml = BuildAdminFeedbackEmailHtml(senderName, senderEmail, senderPhone, subject, message, feedbackType);
+            var adminSent = await SendEmailAsync(_adminEmail, $"[TradeScout] Geri Bildirim: {subject}", adminBodyHtml);
+            
+            // 2. Send confirmation to user
+            var userBodyHtml = BuildUserConfirmationEmailHtml(senderName, subject, feedbackType);
+            var userSent = await SendEmailAsync(senderEmail, "Geri Bildiriminiz Kaydedilmiştir - TradeScout", userBodyHtml);
+
+            return adminSent && userSent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ Geri bildirim email'leri gönderme hatası: {SenderEmail}", senderEmail);
+            return true; // Return true anyway so feedback is saved
+        }
+    }
+
+    private string BuildAdminFeedbackEmailHtml(string senderName, string senderEmail, string? senderPhone, string subject, string message, string? feedbackType)
+    {
+        return $@"
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; background-color: #f5f5f5; }}
+                    .container {{ max-width: 600px; margin: 20px auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+                    .header {{ background-color: #2c3e50; color: white; padding: 15px; border-radius: 5px; }}
+                    .header h1 {{ margin: 0; font-size: 24px; }}
+                    .content {{ margin: 20px 0; }}
+                    .field {{ margin: 10px 0; }}
+                    .label {{ font-weight: bold; color: #2c3e50; }}
+                    .value {{ color: #555; margin-top: 5px; padding: 10px; background-color: #f9f9f9; border-left: 4px solid #3498db; }}
+                    .footer {{ color: #999; font-size: 12px; text-align: center; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; }}
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>🔔 Yeni Kullanıcı Geri Bildirimi</h1>
+                    </div>
+                    <div class='content'>
+                        <div class='field'>
+                            <div class='label'>Gönderen:</div>
+                            <div class='value'>{senderName}</div>
+                        </div>
+                        <div class='field'>
+                            <div class='label'>Email:</div>
+                            <div class='value'>{senderEmail}</div>
+                        </div>
+                        {(string.IsNullOrEmpty(senderPhone) ? "" : $@"
+                        <div class='field'>
+                            <div class='label'>Telefon:</div>
+                            <div class='value'>{senderPhone}</div>
+                        </div>")}
+                        <div class='field'>
+                            <div class='label'>Geri Bildirim Türü:</div>
+                            <div class='value'>{feedbackType ?? "Belirtilmemiş"}</div>
+                        </div>
+                        <div class='field'>
+                            <div class='label'>Konu:</div>
+                            <div class='value'>{subject}</div>
+                        </div>
+                        <div class='field'>
+                            <div class='label'>Mesaj:</div>
+                            <div class='value'>{message.Replace(Environment.NewLine, "<br>")}</div>
+                        </div>
+                    </div>
+                    <div class='footer'>
+                        <p>TradeScout Geri Bildirim Sistemi - {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss} UTC</p>
+                    </div>
+                </div>
+            </body>
+            </html>";
+    }
+
+    private string BuildUserConfirmationEmailHtml(string senderName, string subject, string? feedbackType)
+    {
+        return $@"
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; background-color: #f5f5f5; }}
+                    .container {{ max-width: 600px; margin: 20px auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+                    .header {{ background-color: #27ae60; color: white; padding: 15px; border-radius: 5px; }}
+                    .header h1 {{ margin: 0; font-size: 24px; }}
+                    .content {{ margin: 20px 0; line-height: 1.6; color: #333; }}
+                    .footer {{ color: #999; font-size: 12px; text-align: center; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px; }}
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <div class='header'>
+                        <h1>✅ Geri Bildirimi Aldık!</h1>
+                    </div>
+                    <div class='content'>
+                        <p>Merhaba {senderName},</p>
+                        <p>Geri bildiriminiz başarıyla kaydedilmiş ve bizim destek ekibimize iletilmiştir.</p>
+                        <p>Geri Bildirim Özeti:</p>
+                        <ul>
+                            <li><strong>Tür:</strong> {feedbackType ?? "Belirtilmemiş"}</li>
+                            <li><strong>Konu:</strong> {subject}</li>
+                        </ul>
+                        <p>Sorularınız veya gerçekleştirmeye çalıştığınız bir şey varsa, lütfen bu e-postaya cevap vererek bize bilgilendirebilirsiniz.</p>
+                        <p>Yardımcı olmaktan mutlu olacağız!<br><br>
+                        <strong>TradeScout Ekibi</strong></p>
+                    </div>
+                    <div class='footer'>
+                        <p>© 2026 TradeScout. Tüm hakları saklıdır.</p>
+                    </div>
+                </div>
+            </body>
+            </html>";
+    }
 }
 
 /// <summary>
@@ -25,11 +282,21 @@ public class ResendEmailService : IEmailService
     public ResendEmailService(
         IConfiguration configuration,
         ILogger<ResendEmailService> logger,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        IWebHostEnvironment environment)
     {
         _httpClient = httpClient;
-        _resendApiKey = configuration["EmailSettings:ResendApiKey"] ?? "";
-        _fromEmail = configuration["EmailSettings:FromEmail"] ?? "noreply@fgstrade.com";
+        // Try environment variable first, then appsettings.json
+        _resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY") 
+            ?? configuration["EmailSettings:ResendApiKey"] 
+            ?? "";
+        
+        // In development, use Resend sandbox address if domain not verified
+        var isDevelopment = environment.IsDevelopment();
+        _fromEmail = isDevelopment 
+            ? "onboarding@resend.dev" // Resend sandbox (works without domain verification)
+            : (configuration["EmailSettings:FromEmail"] ?? "noreply@fgstrade.com");
+        
         _adminEmail = configuration["EmailSettings:AdminEmail"] ?? "info@fgstrade.com";
         _logger = logger;
         
@@ -52,12 +319,12 @@ public class ResendEmailService : IEmailService
         }
         else if (!_resendApiKey.StartsWith("re_"))
         {
-            _logger.LogWarning("⚠️ Resend API Key format looks invalid (should start with 're_'). Check appsettings.json");
+            _logger.LogWarning("⚠️ Resend API Key format looks invalid (should start with 're_'). Check .env or appsettings.json");
         }
         else
         {
             var apiKeyPreview = _resendApiKey.Length > 10 ? _resendApiKey.Substring(0, 10) : _resendApiKey;
-            _logger.LogInformation("✅ Resend Email Service initialized with API Key: {ApiKeyStart}...", apiKeyPreview);
+            _logger.LogInformation("✅ Resend Email Service initialized with API Key: {ApiKeyStart}..., From: {FromEmail}", apiKeyPreview, _fromEmail);
         }
     }
 

@@ -170,8 +170,8 @@ builder.Services.AddCors(options =>
             : new[]
             {
                 // Production
-                "https://PRODUCTION_DOMAIN",   // Production HTTPS
-                "https://www.PRODUCTION_DOMAIN" // Production HTTPS with www
+                "https://fgstrade.com",   // Production HTTPS
+                "https://www.fgstrade.com" // Production HTTPS with www
             };
 
         policy
@@ -208,8 +208,21 @@ builder.Services.AddHttpClient("ResendClient", client =>
 // Register generic HttpClient
 builder.Services.AddHttpClient();
 
-// Register Resend Email Service
-builder.Services.AddScoped<IEmailService, ResendEmailService>();
+// Register Email Service based on EMAIL_PROVIDER environment variable
+var emailProvider = Environment.GetEnvironmentVariable("EMAIL_PROVIDER")?.ToLower() 
+    ?? builder.Configuration["EmailSettings:Provider"]?.ToLower() 
+    ?? "smtp"; // Default to SMTP (Natro)
+
+if (emailProvider == "resend")
+{
+    Console.WriteLine("📧 Using Resend Email Service");
+    builder.Services.AddScoped<IEmailService, ResendEmailService>();
+}
+else
+{
+    Console.WriteLine("📧 Using SMTP Email Service (Natro)");
+    builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+}
 
 // Register Proxy Manager
 builder.Services.AddSingleton<ProxyManager>();
@@ -257,7 +270,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
-
+app.UseRouting();
 // ⚠️ CORS middleware - Hataların CORS başlıkları kaybetmemesi için erken konumlandı
 app.UseCors("AllowReactApp");
 

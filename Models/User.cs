@@ -94,4 +94,23 @@ public class User
 
     [Column("LastLogin")]
     public DateTime? LastLogin { get; set; }
+
+    // Email verification
+    [Column("IsEmailVerified")]
+    public bool IsEmailVerified { get; set; } = false;
+
+    [Column("EmailVerificationCode")]
+    [MaxLength(10)]
+    public string? EmailVerificationCode { get; set; }
+
+    [Column("EmailVerificationExpiry")]
+    public DateTime? EmailVerificationExpiry { get; set; }
+
+    // Password reset
+    [Column("PasswordResetCode")]
+    [MaxLength(10)]
+    public string? PasswordResetCode { get; set; }
+
+    [Column("PasswordResetExpiry")]
+    public DateTime? PasswordResetExpiry { get; set; }
 }

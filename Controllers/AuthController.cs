@@ -19,15 +19,18 @@ public class AuthController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IJwtService _jwtService;
     private readonly ILogger<AuthController> _logger;
+    private readonly IEmailService _emailService;
 
     public AuthController(
         ApplicationDbContext context, 
         IJwtService jwtService,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        IEmailService emailService)
     {
         _context = context;
         _jwtService = jwtService;
         _logger = logger;
+        _emailService = emailService;
     }
 
     /// <summary>
@@ -208,4 +211,281 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Giriş işlemi sırasında bir hata oluştu." });
         }
     }
+
+    /// <summary>
+    /// Request password reset - sends a code to user's email
+    /// </summary>
+    [HttpPost("reset-password-request")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResetPasswordRequest([FromBody] ResetPasswordRequestDto request)
+    {
+        try
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+            if (user == null)
+            {
+                // Don't reveal if user exists or not for security
+                return Ok(new { message = "Eğer bu e-posta adresi kayıtlıysa, şifre sıfırlama kodu gönderildi." });
+            }
+
+            // Generate 6-digit code
+            var resetCode = new Random().Next(100000, 999999).ToString();
+            user.PasswordResetCode = resetCode;
+            user.PasswordResetExpiry = DateTime.UtcNow.AddMinutes(15); // 15 dakika geçerli
+
+            await _context.SaveChangesAsync();
+
+            // Send email with reset code
+            var emailBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .header {{ text-align: center; margin-bottom: 30px; }}
+        .header h1 {{ color: #2563eb; margin: 0; }}
+        .code-box {{ background-color: #f0f9ff; border: 2px dashed #2563eb; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }}
+        .code {{ font-size: 32px; font-weight: bold; color: #1e40af; letter-spacing: 5px; }}
+        .warning {{ color: #dc2626; font-size: 14px; margin-top: 20px; }}
+        .footer {{ color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>� FGS Trade</h1>
+            <p>Şifre Sıfırlama Kodu</p>
+        </div>
+        <p>Merhaba,</p>
+        <p>Şifre sıfırlama talebiniz için doğrulama kodunuz aşağıdadır:</p>
+        <div class='code-box'>
+            <span class='code'>{resetCode}</span>
+        </div>
+        <p class='warning'>⚠️ Bu kod 15 dakika içinde geçerliliğini yitirecektir.</p>
+        <p>Eğer bu talebi siz yapmadıysanız, bu e-postayı görmezden gelebilirsiniz.</p>
+        <div class='footer'>
+            <p>FGS Trade - Akıllı İş Keşfi Platformu</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            await _emailService.SendEmailAsync(user.Email, "FGS Trade - Şifre Sıfırlama Kodu", emailBody);
+            _logger.LogInformation("🔑 Şifre sıfırlama kodu gönderildi: {Email}", user.Email);
+
+            return Ok(new { message = "Şifre sıfırlama kodu e-posta adresinize gönderildi." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Şifre sıfırlama isteği hatası: {Email}", request.Email);
+            return StatusCode(500, new { message = "Bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Reset password with code
+    /// </summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto request)
+    {
+        try
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+            if (user == null)
+            {
+                return BadRequest(new { message = "Geçersiz e-posta adresi." });
+            }
+
+            if (user.PasswordResetCode != request.Code)
+            {
+                return BadRequest(new { message = "Geçersiz sıfırlama kodu." });
+            }
+
+            if (user.PasswordResetExpiry == null || user.PasswordResetExpiry < DateTime.UtcNow)
+            {
+                return BadRequest(new { message = "Sıfırlama kodu süresi dolmuş. Lütfen yeni kod isteyin." });
+            }
+
+            // Update password
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.PasswordResetCode = null;
+            user.PasswordResetExpiry = null;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("✅ Şifre sıfırlandı: {Email}", user.Email);
+
+            return Ok(new { message = "Şifreniz başarıyla sıfırlandı. Giriş yapabilirsiniz." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Şifre sıfırlama hatası: {Email}", request.Email);
+            return StatusCode(500, new { message = "Bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Send email verification code
+    /// </summary>
+    [HttpPost("send-verification")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SendVerificationCode([FromBody] EmailRequestDto request)
+    {
+        try
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+            if (user == null)
+            {
+                return NotFound(new { message = "Kullanıcı bulunamadı." });
+            }
+
+            if (user.IsEmailVerified)
+            {
+                return Ok(new { message = "E-posta adresi zaten doğrulanmış." });
+            }
+
+            // Generate 6-digit code
+            var verificationCode = new Random().Next(100000, 999999).ToString();
+            user.EmailVerificationCode = verificationCode;
+            user.EmailVerificationExpiry = DateTime.UtcNow.AddMinutes(30); // 30 dakika geçerli
+
+            await _context.SaveChangesAsync();
+
+            // Send email with verification code
+            var emailBody = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }}
+        .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .header {{ text-align: center; margin-bottom: 30px; }}
+        .header h1 {{ color: #10b981; margin: 0; }}
+        .code-box {{ background-color: #ecfdf5; border: 2px dashed #10b981; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px; }}
+        .code {{ font-size: 32px; font-weight: bold; color: #047857; letter-spacing: 5px; }}
+        .warning {{ color: #f59e0b; font-size: 14px; margin-top: 20px; }}
+        .footer {{ color: #6b7280; font-size: 12px; text-align: center; margin-top: 30px; }}
+    </style>
+</head>
+<body>
+    <div class='container'>
+        <div class='header'>
+            <h1>✉️ FGS Trade</h1>
+            <p>E-posta Doğrulama Kodu</p>
+        </div>
+        <p>Merhaba {user.FullName},</p>
+        <p>FGS Trade'e hoş geldiniz! E-posta adresinizi doğrulamak için aşağıdaki kodu kullanın:</p>
+        <div class='code-box'>
+            <span class='code'>{verificationCode}</span>
+        </div>
+        <p class='warning'>⏰ Bu kod 30 dakika içinde geçerliliğini yitirecektir.</p>
+        <p>E-posta adresinizi doğruladıktan sonra tüm özelliklere erişebilirsiniz.</p>
+        <div class='footer'>
+            <p>FGS Trade - Akıllı İş Keşfi Platformu</p>
+        </div>
+    </div>
+</body>
+</html>";
+
+            await _emailService.SendEmailAsync(user.Email, "FGS Trade - E-posta Doğrulama Kodu", emailBody);
+            _logger.LogInformation("📧 E-posta doğrulama kodu gönderildi: {Email}", user.Email);
+
+            return Ok(new { message = "Doğrulama kodu e-posta adresinize gönderildi." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Doğrulama kodu gönderme hatası: {Email}", request.Email);
+            return StatusCode(500, new { message = "Bir hata oluştu." });
+        }
+    }
+
+    /// <summary>
+    /// Verify email with code
+    /// </summary>
+    [HttpPost("verify-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto request)
+    {
+        try
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower());
+
+            if (user == null)
+            {
+                return BadRequest(new { message = "Geçersiz e-posta adresi." });
+            }
+
+            if (user.IsEmailVerified)
+            {
+                return Ok(new { message = "E-posta adresi zaten doğrulanmış." });
+            }
+
+            if (user.EmailVerificationCode != request.Code)
+            {
+                return BadRequest(new { message = "Geçersiz doğrulama kodu." });
+            }
+
+            if (user.EmailVerificationExpiry == null || user.EmailVerificationExpiry < DateTime.UtcNow)
+            {
+                return BadRequest(new { message = "Doğrulama kodu süresi dolmuş. Lütfen yeni kod isteyin." });
+            }
+
+            // Verify email
+            user.IsEmailVerified = true;
+            user.EmailVerificationCode = null;
+            user.EmailVerificationExpiry = null;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("✅ E-posta doğrulandı: {Email}", user.Email);
+
+            return Ok(new { message = "E-posta adresiniz başarıyla doğrulandı." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "E-posta doğrulama hatası: {Email}", request.Email);
+            return StatusCode(500, new { message = "Bir hata oluştu." });
+        }
+    }
+}
+
+// DTOs for password reset and email verification
+public class ResetPasswordRequestDto
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ResetPasswordDto
+{
+    public string Email { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public class EmailRequestDto
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class VerifyEmailDto
+{
+    public string Email { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
 }
