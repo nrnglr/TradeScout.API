@@ -235,6 +235,8 @@ builder.Services.AddScoped<IGoogleMapsScraperService, GoogleMapsScraperService>(
 builder.Services.AddScoped<IParallelGoogleMapsScraperService, ParallelGoogleMapsScraperService>();
 builder.Services.AddScoped<IGeminiSearchService, GeminiSearchService>(); // ✨ Gemini AI Service
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
+builder.Services.AddScoped<ITradeIntelligenceService, TradeIntelligenceService>(); // 📊 Trade Intelligence Service
+builder.Services.AddScoped<IPdfExportService, PdfExportService>(); // 📄 PDF Export Service
 
 // ===== CONTROLLER CONFIGURATION =====
 builder.Services.AddControllers()

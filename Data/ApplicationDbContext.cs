@@ -17,6 +17,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Business> Businesses { get; set; }
     public DbSet<ScrapingJob> ScrapingJobs { get; set; }
     public DbSet<Feedback> Feedbacks { get; set; }
+    public DbSet<MarketAnalysis> MarketAnalyses { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +74,43 @@ public class ApplicationDbContext : DbContext
 
             // Create index on email for quick lookups
             entity.HasIndex(e => e.Email);
+        });
+
+        // Configure MarketAnalysis entity
+        modelBuilder.Entity<MarketAnalysis>(entity =>
+        {
+            entity.ToTable("MarketAnalyses");
+
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+            entity.Property(e => e.HsCode).HasColumnName("HsCode").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.ProductName).HasColumnName("ProductName").HasMaxLength(255).IsRequired();
+            entity.Property(e => e.TargetCountry).HasColumnName("TargetCountry").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.OriginCountry).HasColumnName("OriginCountry").HasMaxLength(100).HasDefaultValue("Türkiye");
+            entity.Property(e => e.ReportContent).HasColumnName("ReportContent");
+            entity.Property(e => e.IsSuccessful).HasColumnName("IsSuccessful").HasDefaultValue(true);
+            entity.Property(e => e.ErrorMessage).HasColumnName("ErrorMessage").HasMaxLength(500);
+            entity.Property(e => e.PdfDownloaded).HasColumnName("PdfDownloaded").HasDefaultValue(false);
+            entity.Property(e => e.PdfDownloadedAt).HasColumnName("PdfDownloadedAt");
+            entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.IpAddress).HasColumnName("IpAddress").HasMaxLength(50);
+            entity.Property(e => e.UserAgent).HasColumnName("UserAgent").HasMaxLength(500);
+            entity.Property(e => e.ViewCount).HasColumnName("ViewCount").HasDefaultValue(1);
+            entity.Property(e => e.IsFavorite).HasColumnName("IsFavorite").HasDefaultValue(false);
+            entity.Property(e => e.Notes).HasColumnName("Notes").HasMaxLength(1000);
+
+            // Foreign key relationship
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Indexes for quick lookups
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.HsCode);
+            entity.HasIndex(e => e.TargetCountry);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.HsCode, e.TargetCountry }); // Composite index
         });
     }
 }
