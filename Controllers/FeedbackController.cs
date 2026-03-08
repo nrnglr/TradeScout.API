@@ -308,6 +308,70 @@ public class FeedbackController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Test SMTP email configuration
+    /// </summary>
+    /// <param name="email">Email address to send test email</param>
+    /// <returns>Test result</returns>
+    [HttpGet("test-email")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> TestEmail([FromQuery] string email = "info@fgstrade.com")
+    {
+        try
+        {
+            _logger.LogInformation("📧 SMTP test email gönderiliyor: {Email}", email);
+
+            var testHtml = $@"
+                <html>
+                <body style='font-family: Arial, sans-serif; padding: 20px;'>
+                    <h2 style='color: #2563eb;'>🎉 FGS Trade - SMTP Test Başarılı!</h2>
+                    <p>Bu email SMTP ayarlarınızın doğru çalıştığını göstermektedir.</p>
+                    <hr style='border: 1px solid #e5e7eb;' />
+                    <p><strong>Test Zamanı:</strong> {DateTime.Now:dd/MM/yyyy HH:mm:ss}</p>
+                    <p><strong>Sunucu:</strong> mail.kurumsaleposta.com:465</p>
+                    <p style='color: #16a34a;'>✅ Email servisi aktif ve çalışıyor!</p>
+                </body>
+                </html>";
+
+            var result = await _emailService.SendEmailAsync(
+                email,
+                "🧪 FGS Trade - SMTP Test Email",
+                testHtml
+            );
+
+            if (result)
+            {
+                _logger.LogInformation("✅ Test email başarıyla gönderildi: {Email}", email);
+                return Ok(new { 
+                    success = true, 
+                    message = $"Test email başarıyla gönderildi: {email}",
+                    timestamp = DateTime.Now
+                });
+            }
+            else
+            {
+                _logger.LogWarning("❌ Test email gönderilemedi: {Email}", email);
+                return StatusCode(500, new { 
+                    success = false, 
+                    message = "Email gönderilemedi. SMTP ayarlarını kontrol edin.",
+                    timestamp = DateTime.Now
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ SMTP test hatası: {Error}", ex.Message);
+            return StatusCode(500, new { 
+                success = false, 
+                message = "SMTP test hatası",
+                error = ex.Message,
+                innerError = ex.InnerException?.Message,
+                timestamp = DateTime.Now
+            });
+        }
+    }
+
     private FeedbackResponseDto MapToResponse(Feedback feedback)
     {
         return new FeedbackResponseDto

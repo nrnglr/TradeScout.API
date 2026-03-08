@@ -24,6 +24,11 @@ public class TradeIntelligenceRequestDto
     /// Menşei Ülke - Ürünün üretildiği ülke (örn: Türkiye)
     /// </summary>
     public string OriginCountry { get; set; } = "Türkiye";
+    
+    /// <summary>
+    /// Rapor Dili (örn: Türkçe, English, Deutsch)
+    /// </summary>
+    public string Language { get; set; } = "Türkçe";
 }
 
 /// <summary>
