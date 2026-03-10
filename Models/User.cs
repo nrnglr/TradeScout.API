@@ -3,9 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace TradeScout.API.Models;
 
-/// <summary>
-/// User type enum
-/// </summary>
 public enum UserType
 {
     Manufacturer,
@@ -13,9 +10,6 @@ public enum UserType
     Researcher
 }
 
-/// <summary>
-/// User entity representing a TradeScout user
-/// </summary>
 [Table("Users")]
 public class User
 {
@@ -72,7 +66,7 @@ public class User
 
     [Required]
     [Column("MaxResultsPerSearch")]
-    public int MaxResultsPerSearch { get; set; } = 200; // Varsayılan 200 firma
+    public int MaxResultsPerSearch { get; set; } = 200;
 
     [Required]
     [Column("PackageType")]
@@ -113,4 +107,11 @@ public class User
 
     [Column("PasswordResetExpiry")]
     public DateTime? PasswordResetExpiry { get; set; }
+
+    // ── Üyelik tarihleri (ödeme sonrası dolar) ────────────────────────────
+    [Column("MembershipStart")]
+    public DateTime? MembershipStart { get; set; }
+
+    [Column("MembershipEnd")]
+    public DateTime? MembershipEnd { get; set; }
 }

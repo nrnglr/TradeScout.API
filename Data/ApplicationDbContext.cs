@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ScrapingJob> ScrapingJobs { get; set; }
     public DbSet<Feedback> Feedbacks { get; set; }
     public DbSet<MarketAnalysis> MarketAnalyses { get; set; }
+    public DbSet<PaymentHistory> PaymentHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -111,6 +112,41 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.TargetCountry);
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => new { e.HsCode, e.TargetCountry }); // Composite index
+        });
+
+        // Configure PaymentHistory entity
+        modelBuilder.Entity<PaymentHistory>(entity =>
+        {
+            entity.ToTable("PaymentHistories");
+
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.UserId).HasColumnName("UserId").IsRequired();
+            entity.Property(e => e.OrderId).HasColumnName("OrderId").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TransactionId).HasColumnName("TransactionId").HasMaxLength(100);
+            entity.Property(e => e.ProductCode).HasColumnName("ProductCode").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.PackageName).HasColumnName("PackageName").HasMaxLength(50);
+            entity.Property(e => e.Amount).HasColumnName("Amount").HasPrecision(18, 2).IsRequired();
+            entity.Property(e => e.Currency).HasColumnName("Currency").HasMaxLength(10).HasDefaultValue("USD");
+            entity.Property(e => e.CreditsAdded).HasColumnName("CreditsAdded").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasMaxLength(20).HasDefaultValue("PENDING");
+            entity.Property(e => e.PaymentDate).HasColumnName("PaymentDate").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.Installment).HasColumnName("Installment").HasDefaultValue(1);
+            entity.Property(e => e.CardLastFour).HasColumnName("CardLastFour").HasMaxLength(4);
+            entity.Property(e => e.ErrorMessage).HasColumnName("ErrorMessage").HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Foreign key relationship
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexes for quick lookups
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.OrderId).IsUnique();
+            entity.HasIndex(e => e.TransactionId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.PaymentDate);
         });
     }
 }
