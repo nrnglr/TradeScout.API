@@ -88,28 +88,34 @@ public class PaymentController : ControllerBase
     /// </summary>
     [HttpPost("callback")]
     [AllowAnonymous] // Tosla'dan gelecek, auth yok
+    [Consumes("application/x-www-form-urlencoded", "application/json", "multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> PaymentCallback([FromBody] ToslaCallbackDto callback)
+    public async Task<IActionResult> PaymentCallback([FromForm] ToslaCallbackDto callback)
     {
         try
         {
-            _logger.LogInformation("🔔 Tosla callback alındı - TransactionId: {TransactionId}",
-                callback.TransactionId);
+            _logger.LogInformation("🔔 Tosla callback alındı - OrderId: {OrderId} | BankCode: {BankCode}",
+                callback.OrderId, callback.BankResponseCode);
+
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
 
             var success = await _toslaPaymentService.ProcessCallbackAsync(callback);
 
             if (success)
             {
-                return Ok(new { status = "success", message = "Ödeme başarıyla işlendi" });
+                // Ödeme başarılı → kullanıcıyı success sayfasına yönlendir
+                return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}");
             }
 
-            return BadRequest(new { status = "failed", message = "Ödeme işlenemedi" });
+            // Ödeme başarısız → failed sayfasına yönlendir
+            return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Callback işleme hatası");
-            return StatusCode(500, new { status = "error", message = "Sistem hatası" });
+            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
+            return Redirect($"{frontendUrl}/payment/failed?error=system");
         }
     }
 
