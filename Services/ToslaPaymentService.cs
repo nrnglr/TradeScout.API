@@ -153,7 +153,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "10 Kredi",
             NameTr         = "10 Ekstra Kredi",
             PriceUsd       = 10m,
-            PriceTry       = 350m,
+            PriceTry       = 1m,        // ⚠️ TEST İÇİN 1 TL - CANLIDA 350m YAPILACAK!
             Credits        = 10,
             DurationDays   = 0,         // Süresiz
             MaxInstallment = 1,
