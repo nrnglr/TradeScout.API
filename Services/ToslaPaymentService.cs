@@ -270,11 +270,17 @@ public class ToslaPaymentService : IToslaPaymentService
             // Hash parametreleri (GMT+3, tek seferde üret)
             var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-            var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
+            
+            // Tosla Hash Formülü: apiPass + clientId + apiUser + rnd + timeSpan
+            // NOT: callbackUrl hash'e DAHİL DEĞİL - sadece body'de gönderilir
+            var hashInput = _apiPass + _clientId + _apiUser + rnd + timeSpan;
+            var hash = ComputeHash(hashInput);
 
             _logger.LogInformation(
-                "HASH DEBUG | Rnd={Rnd} | TimeSpan={Ts} | Input='{Input}'",
-                rnd, timeSpan, _apiPass + _clientId + _apiUser + rnd + timeSpan);
+                "HASH DEBUG | Rnd={Rnd} | TimeSpan={Ts} | ApiPass={Pass} | ClientId={Cid} | ApiUser={User}",
+                rnd, timeSpan, _apiPass, _clientId, _apiUser);
+            _logger.LogInformation("HASH INPUT: '{Input}'", hashInput);
+            _logger.LogInformation("HASH OUTPUT: '{Hash}'", hash);
 
             // OrderId max 20 karakter
             var ts      = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
@@ -311,6 +317,7 @@ public class ToslaPaymentService : IToslaPaymentService
             };
 
             var json    = JsonSerializer.Serialize(body);
+            _logger.LogInformation("REQUEST BODY: {Json}", json);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var url     = $"{_baseUrl}/threeDPayment";
 
