@@ -235,8 +235,8 @@ builder.Services.AddScoped<IGoogleMapsScraperService, GoogleMapsScraperService>(
 builder.Services.AddScoped<IParallelGoogleMapsScraperService, ParallelGoogleMapsScraperService>();
 builder.Services.AddScoped<IGeminiSearchService, GeminiSearchService>(); // ✨ Gemini AI Service
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
-// builder.Services.AddScoped<ITradeIntelligenceService, TradeIntelligenceService>(); // 📊 Trade Intelligence Service (TODO: Service eksik)
-// builder.Services.AddScoped<IPdfExportService, PdfExportService>(); // 📄 PDF Export Service (TODO: Service eksik)
+ builder.Services.AddScoped<ITradeIntelligenceService, TradeIntelligenceService>(); // 📊 Trade Intelligence Service (TODO: Service eksik)
+builder.Services.AddScoped<IPdfExportService, PdfExportService>(); // 📄 PDF Export Service (TODO: Service eksik)
 builder.Services.AddScoped<IToslaPaymentService, ToslaPaymentService>(); // 💳 Tosla Payment Service
 
 // ===== CONTROLLER CONFIGURATION =====
