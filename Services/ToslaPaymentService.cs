@@ -487,6 +487,42 @@ public class ToslaPaymentService : IToslaPaymentService
                 return; 
             }
 
+            // 4. ProductCode hala boşsa, TransactionId ile Tosla'dan sorgulama yap
+            if (string.IsNullOrEmpty(productCode) && !string.IsNullOrEmpty(callback.OrderId))
+            {
+                _logger.LogInformation("🔍 ProductCode bulunamadı, Tosla'dan sorgulama yapılıyor | OrderId={Oid}", callback.OrderId);
+                
+                try
+                {
+                    var inquiry = await InquiryPaymentAsync(callback.OrderId);
+                    if (inquiry != null && inquiry.Code == 0)
+                    {
+                        _logger.LogInformation("📞 Tosla inquiry başarılı | Transactions={Count}", inquiry.Transactions?.Count ?? 0);
+                        // Inquiry'den de ProductCode alamayız, bu durumda Amount'tan tahmin edebiliriz
+                        // veya default paket olarak Starter atayabiliriz
+                        
+                        // Amount'a göre paket belirle
+                        var amountTL = callback.Amount / 100m;
+                        productCode = GuessProductCodeFromAmount(amountTL);
+                        _logger.LogInformation("🔍 Amount'dan ProductCode tahmin edildi | Amount={Amt} TL | ProductCode={Pc}", 
+                            amountTL, productCode);
+                    }
+                }
+                catch (Exception exInquiry)
+                {
+                    _logger.LogWarning(exInquiry, "Tosla inquiry hatası");
+                }
+            }
+
+            // 5. Hala ProductCode bulunamadıysa, Amount'dan tahmin et
+            if (string.IsNullOrEmpty(productCode))
+            {
+                var amountTL = callback.Amount / 100m;
+                productCode = GuessProductCodeFromAmount(amountTL);
+                _logger.LogInformation("🔍 ProductCode Amount'dan tahmin edildi | Amount={Amt} TL | ProductCode={Pc}", 
+                    amountTL, productCode);
+            }
+
             _logger.LogInformation("👤 Kullanıcı aranıyor | UserId={Id}", userId);
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user is null) 
@@ -611,6 +647,28 @@ public class ToslaPaymentService : IToslaPaymentService
                 p.Alias.Equals(mappedAlias, StringComparison.OrdinalIgnoreCase));
 
         return null;
+    }
+
+    /// <summary>
+    /// Amount'a göre ProductCode tahmin et (Echo/ExtraParameters gelmediğinde fallback)
+    /// </summary>
+    private string GuessProductCodeFromAmount(decimal amountTL)
+    {
+        // Tutara göre en yakın paketi bul
+        var package = _packages
+            .OrderBy(p => Math.Abs(p.PriceTry - amountTL))
+            .FirstOrDefault();
+
+        if (package != null)
+        {
+            _logger.LogInformation("💡 Amount'dan paket tahmin edildi | Amount={Amt} TL → {Pkg} ({Code})", 
+                amountTL, package.Name, package.ProductCode);
+            return package.ProductCode;
+        }
+
+        // Hiç paket bulunamazsa, default olarak 1 TL için Starter dön
+        _logger.LogWarning("⚠️ Amount'a uygun paket bulunamadı, default Starter kullanılıyor | Amount={Amt}", amountTL);
+        return "1274715"; // Starter Monthly
     }
 
     private static string ComputeHash(string input)
