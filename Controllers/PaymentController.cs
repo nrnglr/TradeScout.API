@@ -168,4 +168,58 @@ public class PaymentController : ControllerBase
         var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
         return Redirect($"{frontendUrl}/payment/failed?orderId={orderId}&error={error}");
     }
+
+    /// <summary>
+    /// Ödeme doğrulama - Frontend'den tetiklenir, Tosla'dan ödeme durumunu sorgular
+    /// </summary>
+    [HttpPost("verify/{orderId}")]
+    [AllowAnonymous] // Kullanıcı ödeme sonrası logout olabilir
+    [ProducesResponseType(typeof(PaymentVerificationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PaymentVerificationResponseDto>> VerifyPayment(string orderId)
+    {
+        try
+        {
+            _logger.LogInformation("🔍 Ödeme doğrulama isteği alındı | OrderId: {OrderId}", orderId);
+
+            // Tosla'dan ödeme durumunu sorgula
+            var result = await _toslaPaymentService.VerifyAndProcessPaymentAsync(orderId);
+
+            if (result.Success)
+            {
+                _logger.LogInformation("✅ Ödeme doğrulandı ve işlendi | OrderId: {OrderId} | Credits: {Credits}", 
+                    orderId, result.CreditsAdded);
+                
+                return Ok(new PaymentVerificationResponseDto
+                {
+                    Success = true,
+                    Message = "Ödeme başarıyla doğrulandı ve krediler yüklendi",
+                    OrderId = orderId,
+                    CreditsAdded = result.CreditsAdded,
+                    PackageName = result.PackageName,
+                    IsAlreadyProcessed = result.IsAlreadyProcessed
+                });
+            }
+
+            _logger.LogWarning("❌ Ödeme doğrulanamadı | OrderId: {OrderId} | Error: {Error}", 
+                orderId, result.ErrorMessage);
+            
+            return BadRequest(new PaymentVerificationResponseDto
+            {
+                Success = false,
+                Message = result.ErrorMessage ?? "Ödeme doğrulanamadı",
+                OrderId = orderId
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Ödeme doğrulama hatası | OrderId: {OrderId}", orderId);
+            return StatusCode(500, new PaymentVerificationResponseDto
+            {
+                Success = false,
+                Message = "Ödeme doğrulanırken bir hata oluştu",
+                OrderId = orderId
+            });
+        }
+    }
 }

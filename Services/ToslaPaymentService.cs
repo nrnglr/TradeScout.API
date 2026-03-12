@@ -15,6 +15,11 @@ public interface IToslaPaymentService
     Task<bool> ProcessCallbackAsync(ToslaCallbackDto callback);
     List<FgsTradePackage> GetAvailablePackages();
     Task<ToslaInquiryResponseDto?> InquiryPaymentAsync(string orderId);
+    
+    /// <summary>
+    /// Ödemeyi Tosla'dan sorgulayıp doğrula ve kredileri yükle
+    /// </summary>
+    Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string orderId);
 }
 
 /// <summary>
@@ -653,6 +658,178 @@ public class ToslaPaymentService : IToslaPaymentService
                 return v.ValueKind == JsonValueKind.String ? v.GetString()
                      : v.ValueKind == JsonValueKind.Number ? v.GetInt64().ToString() : null;
         return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FRONTEND-TETİKLEMLİ ÖDEME DOĞRULAMA
+    // ─────────────────────────────────────────────────────────────────────────
+    
+    /// <summary>
+    /// Frontend'den gelen verify isteği ile ödemeyi Tosla'dan sorgulayıp işle
+    /// </summary>
+    public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string orderId)
+    {
+        try
+        {
+            _logger.LogInformation("🔍 ÖDEME DOĞRULAMA BAŞLADI | OrderId={Oid}", orderId);
+
+            // 1. Daha önce işlenmiş mi kontrol et
+            var existingPayment = await _dbContext.PaymentHistories
+                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
+                .FirstOrDefaultAsync();
+
+            if (existingPayment != null)
+            {
+                _logger.LogInformation("ℹ️ Ödeme zaten işlenmiş | OrderId={Oid} | UserId={Uid} | Credits={Cred}",
+                    orderId, existingPayment.UserId, existingPayment.CreditsAdded);
+
+                return new PaymentVerificationResult
+                {
+                    Success = true,
+                    IsAlreadyProcessed = true,
+                    CreditsAdded = existingPayment.CreditsAdded,
+                    PackageName = existingPayment.PackageName,
+                    UserId = existingPayment.UserId
+                };
+            }
+
+            // 2. Tosla'dan ödeme durumunu sorgula
+            _logger.LogInformation("📞 Tosla'dan ödeme durumu sorgulanıyor | OrderId={Oid}", orderId);
+            var inquiry = await InquiryPaymentAsync(orderId);
+
+            if (inquiry == null || inquiry.Code != 0)
+            {
+                _logger.LogWarning("❌ Tosla inquiry başarısız | Code={Code} | Message={Msg}",
+                    inquiry?.Code, inquiry?.Message);
+                return new PaymentVerificationResult
+                {
+                    Success = false,
+                    ErrorMessage = inquiry?.Message ?? "Ödeme sorgulanamadı"
+                };
+            }
+
+            // 3. Transaction detaylarını al
+            var transaction = inquiry.Transactions?.FirstOrDefault();
+            if (transaction == null)
+            {
+                _logger.LogWarning("❌ Transaction bulunamadı | OrderId={Oid}", orderId);
+                return new PaymentVerificationResult
+                {
+                    Success = false,
+                    ErrorMessage = "İşlem detayları bulunamadı"
+                };
+            }
+
+            _logger.LogInformation("📋 Transaction bulundu | OrderId={Oid} | TxId={TxId} | BankCode={Code} | Amount={Amt}",
+                orderId, transaction.TransactionId, transaction.BankResponseCode, transaction.Amount);
+
+            // 4. Ödeme başarılı mı kontrol et
+            if (transaction.BankResponseCode != "00")
+            {
+                _logger.LogWarning("❌ Ödeme başarısız | BankCode={Code} | Message={Msg}",
+                    transaction.BankResponseCode, transaction.BankResponseMessage);
+
+                // Başarısız ödemeyi kaydet
+                await SaveFailedPaymentFromInquiry(orderId, transaction);
+
+                return new PaymentVerificationResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Ödeme başarısız: {transaction.BankResponseMessage}"
+                };
+            }
+
+            // 5. BAŞARILI ÖDEME - Callback simülasyonu yap
+            _logger.LogInformation("✅ Ödeme başarılı doğrulandı, aktivasyon yapılıyor | OrderId={Oid}", orderId);
+
+            var callbackDto = new ToslaCallbackDto
+            {
+                Code = 0,
+                Message = "Başarılı (Verified)",
+                OrderId = orderId,
+                BankResponseCode = transaction.BankResponseCode,
+                BankResponseMessage = transaction.BankResponseMessage,
+                TransactionId = transaction.TransactionId.ToString(),
+                AuthCode = transaction.AuthCode,
+                Amount = transaction.Amount,
+                RequestStatus = 1
+            };
+
+            // Aktivasyon işlemini yap
+            await ActivateMembershipAsync(callbackDto);
+
+            // 6. Sonuç bilgilerini al
+            var payment = await _dbContext.PaymentHistories
+                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
+                .FirstOrDefaultAsync();
+
+            if (payment == null)
+            {
+                _logger.LogError("❌ CRITICAL: Aktivasyon başarılı ama PaymentHistory bulunamadı | OrderId={Oid}", orderId);
+                return new PaymentVerificationResult
+                {
+                    Success = false,
+                    ErrorMessage = "Ödeme işlendi ama kayıt bulunamadı"
+                };
+            }
+
+            _logger.LogInformation("🎉 ÖDEME DOĞRULAMA TAMAMLANDI | OrderId={Oid} | UserId={Uid} | Credits={Cred}",
+                orderId, payment.UserId, payment.CreditsAdded);
+
+            return new PaymentVerificationResult
+            {
+                Success = true,
+                IsAlreadyProcessed = false,
+                CreditsAdded = payment.CreditsAdded,
+                PackageName = payment.PackageName ?? "Bilinmeyen",
+                UserId = payment.UserId
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Ödeme doğrulama hatası | OrderId={Oid}", orderId);
+            return new PaymentVerificationResult
+            {
+                Success = false,
+                ErrorMessage = "Sistem hatası: " + ex.Message
+            };
+        }
+    }
+
+    /// <summary>
+    /// Başarısız ödemeyi inquiry'den kaydet
+    /// </summary>
+    private async Task SaveFailedPaymentFromInquiry(string orderId, ToslaTransactionDto transaction)
+    {
+        try
+        {
+            // OrderId'den UserId çıkar
+            string userIdStr = "";
+            if (!string.IsNullOrEmpty(orderId) && orderId.StartsWith("FGS") && orderId.Length > 13)
+            {
+                userIdStr = orderId.Substring(13).TrimStart('0');
+            }
+
+            if (int.TryParse(userIdStr, out int userId))
+            {
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId = userId,
+                    OrderId = orderId,
+                    TransactionId = transaction.TransactionId.ToString(),
+                    Amount = transaction.Amount / 100m,
+                    Currency = "TRY",
+                    Status = "FAILED",
+                    PaymentDate = DateTime.UtcNow,
+                    ErrorMessage = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}"
+                });
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Başarısız ödeme kaydı hatası (inquiry)");
+        }
     }
 }
 
