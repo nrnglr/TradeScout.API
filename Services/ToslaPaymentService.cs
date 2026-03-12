@@ -406,17 +406,46 @@ public class ToslaPaymentService : IToslaPaymentService
     {
         try
         {
+            _logger.LogInformation("🔍 Tosla Inquiry başlatılıyor | OrderId={Oid}", orderId);
+            
             var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
             var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
-            var body     = JsonSerializer.Serialize(new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId });
+            
+            var requestBody = new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId };
+            var body     = JsonSerializer.Serialize(requestBody);
+            
+            _logger.LogInformation("📤 Tosla Inquiry Request | URL={Url} | Body={Body}", 
+                $"{_baseUrl}/inquiry", body);
+            
             var resp     = await _httpClient.PostAsync($"{_baseUrl}/inquiry", new StringContent(body, Encoding.UTF8, "application/json"));
             var raw      = await resp.Content.ReadAsStringAsync();
-            return resp.IsSuccessStatusCode
-                ? JsonSerializer.Deserialize<ToslaInquiryResponseDto>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                : null;
+            
+            _logger.LogInformation("📥 Tosla Inquiry Response | StatusCode={Status} | Body={Body}", 
+                (int)resp.StatusCode, raw);
+            
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("❌ Tosla Inquiry başarısız | StatusCode={Status} | Response={Resp}", 
+                    (int)resp.StatusCode, raw);
+                return null;
+            }
+            
+            var result = JsonSerializer.Deserialize<ToslaInquiryResponseDto>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            
+            if (result != null)
+            {
+                _logger.LogInformation("✅ Tosla Inquiry başarılı | Code={Code} | Message={Msg} | TransactionCount={Count}", 
+                    result.Code, result.Message, result.Transactions?.Count ?? 0);
+            }
+            
+            return result;
         }
-        catch (Exception ex) { _logger.LogError(ex, "Sorgulama hatası"); return null; }
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, "❌ Tosla Inquiry hatası | OrderId={Oid} | Message={Msg}", orderId, ex.Message); 
+            return null; 
+        }
     }
 
     public List<FgsTradePackage> GetAvailablePackages() => _packages;
