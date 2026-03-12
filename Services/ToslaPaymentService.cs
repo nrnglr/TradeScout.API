@@ -425,15 +425,24 @@ public class ToslaPaymentService : IToslaPaymentService
         
         try
         {
-            // Echo: "UserId|ProductCode"
-            var parts       = (callback.Echo ?? "").Split('|');
-            var userIdStr   = parts.Length >= 1 ? parts[0] : "";
-            var productCode = parts.Length >= 2 ? parts[1] : "";
+            string userIdStr = "";
+            string productCode = "";
 
-            _logger.LogInformation("📋 Echo parse | Parts={Count} | UserId={Uid} | ProductCode={Pc}", 
-                parts.Length, userIdStr, productCode);
+            // 1. Önce Echo'dan dene
+            if (!string.IsNullOrEmpty(callback.Echo))
+            {
+                var parts = callback.Echo.Split('|');
+                userIdStr   = parts.Length >= 1 ? parts[0] : "";
+                productCode = parts.Length >= 2 ? parts[1] : "";
+                _logger.LogInformation("📋 Echo parse | Parts={Count} | UserId={Uid} | ProductCode={Pc}", 
+                    parts.Length, userIdStr, productCode);
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Echo boş veya null");
+            }
 
-            // ExtraParameters fallback
+            // 2. ExtraParameters fallback
             if (!string.IsNullOrEmpty(callback.ExtraParameters))
             {
                 _logger.LogInformation("📦 ExtraParameters mevcut: {Extra}", callback.ExtraParameters);
@@ -451,9 +460,30 @@ public class ToslaPaymentService : IToslaPaymentService
                 }
             }
 
+            // 3. OrderId'den UserId çekmeyi dene (FGS26031214450000002 → son 7-10 karakter UserId olabilir)
+            if (string.IsNullOrEmpty(userIdStr) && !string.IsNullOrEmpty(callback.OrderId))
+            {
+                _logger.LogInformation("🔍 OrderId'den UserId çıkarma deneniyor | OrderId={Oid}", callback.OrderId);
+                
+                // OrderId format: FGS{timestamp}{userId} - örn: FGS26031214450000002
+                // Son kısım UserId (7 karakter, padding ile)
+                var orderId = callback.OrderId;
+                if (orderId.StartsWith("FGS") && orderId.Length > 13)
+                {
+                    // FGS (3) + Timestamp (10) + UserId (7+)
+                    var potentialUserId = orderId.Substring(13).TrimStart('0'); // Leading zero'ları kaldır
+                    if (!string.IsNullOrEmpty(potentialUserId))
+                    {
+                        userIdStr = potentialUserId;
+                        _logger.LogInformation("🔍 OrderId'den UserId çıkarıldı | UserId={Uid}", userIdStr);
+                    }
+                }
+            }
+
             if (!int.TryParse(userIdStr, out int userId)) 
             { 
-                _logger.LogError("❌ UserId parse edilemedi | Echo={E} | UserIdStr={Uid}", callback.Echo, userIdStr); 
+                _logger.LogError("❌ UserId parse edilemedi | Echo={E} | ExtraParams={Ex} | OrderId={Oid} | UserIdStr={Uid}", 
+                    callback.Echo ?? "(null)", callback.ExtraParameters ?? "(null)", callback.OrderId ?? "(null)", userIdStr); 
                 return; 
             }
 

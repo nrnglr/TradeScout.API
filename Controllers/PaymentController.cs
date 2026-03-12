@@ -95,8 +95,21 @@ public class PaymentController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("🔔 Tosla callback alındı - OrderId: {OrderId} | TransactionId: {TxId} | Code: {Code} | BankCode: {BankCode} | Amount: {Amount}",
-                callback.OrderId, callback.TransactionId, callback.Code, callback.BankResponseCode, callback.Amount);
+            // Gelen tüm verileri logla
+            _logger.LogInformation("🔔 === TOSLA CALLBACK START ===");
+            _logger.LogInformation("📋 OrderId: {OrderId}", callback.OrderId ?? "(null)");
+            _logger.LogInformation("📋 TransactionId: {TxId}", callback.TransactionId ?? "(null)");
+            _logger.LogInformation("📋 Code: {Code}", callback.Code);
+            _logger.LogInformation("📋 Message: {Msg}", callback.Message ?? "(null)");
+            _logger.LogInformation("📋 BankResponseCode: {BankCode}", callback.BankResponseCode ?? "(null)");
+            _logger.LogInformation("📋 BankResponseMessage: {BankMsg}", callback.BankResponseMessage ?? "(null)");
+            _logger.LogInformation("📋 Amount: {Amount}", callback.Amount);
+            _logger.LogInformation("📋 Echo: {Echo}", callback.Echo ?? "(null)");
+            _logger.LogInformation("📋 ExtraParameters: {Extra}", callback.ExtraParameters ?? "(null)");
+            _logger.LogInformation("📋 AuthCode: {Auth}", callback.AuthCode ?? "(null)");
+            _logger.LogInformation("📋 MdStatus: {MdStatus}", callback.MdStatus ?? "(null)");
+            _logger.LogInformation("📋 RequestStatus: {ReqStatus}", callback.RequestStatus);
+            _logger.LogInformation("🔔 === TOSLA CALLBACK END ===");
 
             var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
 
