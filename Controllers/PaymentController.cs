@@ -171,7 +171,9 @@ public class PaymentController : ControllerBase
 
     /// <summary>
     /// Ödeme doğrulama - Frontend'den tetiklenir, Tosla'dan ödeme durumunu sorgular
+    /// GET ve POST destekler (frontend uyumluluğu için)
     /// </summary>
+    [HttpGet("verify/{orderId}")]
     [HttpPost("verify/{orderId}")]
     [AllowAnonymous] // Kullanıcı ödeme sonrası logout olabilir
     [ProducesResponseType(typeof(PaymentVerificationResponseDto), StatusCodes.Status200OK)]
