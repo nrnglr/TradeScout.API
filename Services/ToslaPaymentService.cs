@@ -59,7 +59,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter",
             NameTr         = "Başlangıç",
             PriceUsd       = 15m,
-            PriceTry       = 100m,      // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
+            PriceTry       = 1m,        // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
             Credits        = 0,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -372,21 +372,27 @@ public class ToslaPaymentService : IToslaPaymentService
     {
         try
         {
-            _logger.LogInformation("Callback | OrderId={Oid} | Code={Code} | BankCode={Bank}",
-                callback.OrderId, callback.Code, callback.BankResponseCode);
+            _logger.LogInformation("🔔 CALLBACK ALINDI | OrderId={Oid} | Code={Code} | BankCode={Bank} | BankMsg={Msg} | Amount={Amt} | Echo={Echo}",
+                callback.OrderId, callback.Code, callback.BankResponseCode, callback.BankResponseMessage, 
+                callback.Amount, callback.Echo);
 
             if (callback.Code == 0 && callback.BankResponseCode == "00")
             {
+                _logger.LogInformation("✅ Ödeme BAŞARILI | Aktivasyon başlatılıyor...");
                 await ActivateMembershipAsync(callback);
+                _logger.LogInformation("✅ Aktivasyon tamamlandı | OrderId={Oid}", callback.OrderId);
                 return true;
             }
 
+            _logger.LogWarning("❌ Ödeme BAŞARISIZ | Code={Code} | BankCode={Bank} | BankMsg={Msg}",
+                callback.Code, callback.BankResponseCode, callback.BankResponseMessage);
             await SaveFailedPaymentAsync(callback);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Callback hatası");
+            _logger.LogError(ex, "❌ CALLBACK HATASI | OrderId={Oid} | Message={Msg}", 
+                callback.OrderId, ex.Message);
             return false;
         }
     }
@@ -415,6 +421,8 @@ public class ToslaPaymentService : IToslaPaymentService
     // ─────────────────────────────────────────────────────────────────────────
     private async Task ActivateMembershipAsync(ToslaCallbackDto callback)
     {
+        _logger.LogInformation("🎯 ActivateMembershipAsync başladı | OrderId={Oid}", callback.OrderId);
+        
         try
         {
             // Echo: "UserId|ProductCode"
@@ -422,32 +430,62 @@ public class ToslaPaymentService : IToslaPaymentService
             var userIdStr   = parts.Length >= 1 ? parts[0] : "";
             var productCode = parts.Length >= 2 ? parts[1] : "";
 
+            _logger.LogInformation("📋 Echo parse | Parts={Count} | UserId={Uid} | ProductCode={Pc}", 
+                parts.Length, userIdStr, productCode);
+
             // ExtraParameters fallback
             if (!string.IsNullOrEmpty(callback.ExtraParameters))
             {
+                _logger.LogInformation("📦 ExtraParameters mevcut: {Extra}", callback.ExtraParameters);
                 try
                 {
                     using var doc = JsonDocument.Parse(callback.ExtraParameters);
                     var root = doc.RootElement;
                     if (string.IsNullOrEmpty(userIdStr)   && root.TryGetProperty("userId",      out var u)) userIdStr   = u.GetString() ?? "";
                     if (string.IsNullOrEmpty(productCode) && root.TryGetProperty("productCode", out var p)) productCode = p.GetString() ?? "";
+                    _logger.LogInformation("📦 ExtraParameters parse | UserId={Uid} | ProductCode={Pc}", userIdStr, productCode);
                 }
-                catch { }
+                catch (Exception exParse) 
+                { 
+                    _logger.LogWarning(exParse, "ExtraParameters parse hatası"); 
+                }
             }
 
-            if (!int.TryParse(userIdStr, out int userId)) { _logger.LogWarning("UserId parse edilemedi: {E}", callback.Echo); return; }
+            if (!int.TryParse(userIdStr, out int userId)) 
+            { 
+                _logger.LogError("❌ UserId parse edilemedi | Echo={E} | UserIdStr={Uid}", callback.Echo, userIdStr); 
+                return; 
+            }
 
+            _logger.LogInformation("👤 Kullanıcı aranıyor | UserId={Id}", userId);
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user is null) { _logger.LogWarning("Kullanıcı yok: {Id}", userId); return; }
+            if (user is null) 
+            { 
+                _logger.LogError("❌ Kullanıcı bulunamadı | UserId={Id}", userId); 
+                return; 
+            }
+
+            _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}", 
+                userId, user.Email, user.Credits);
 
             var package = FindPackage(productCode);
-            if (package is null) { _logger.LogWarning("Paket yok: {Code}", productCode); return; }
+            if (package is null) 
+            { 
+                _logger.LogError("❌ Paket bulunamadı | ProductCode={Code}", productCode); 
+                return; 
+            }
+
+            _logger.LogInformation("📦 Paket bulundu | ProductCode={Code} | Name={Name} | Credits={Cred} | IsCredit={IsCred}", 
+                package.ProductCode, package.Name, package.Credits, package.IsCredit);
+
+            var oldCredits = user.Credits;
 
             if (package.IsCredit)
             {
                 // Kredi paketi → sadece kredi ekle
                 user.Credits += package.Credits;
-                _logger.LogInformation("Kredi eklendi | UserId={Id} | +{Credits}", userId, package.Credits);
+                _logger.LogInformation("💰 Kredi ekleniyor | UserId={Id} | Eski={Old} | Eklenen={Add} | Yeni={New}", 
+                    userId, oldCredits, package.Credits, user.Credits);
             }
             else
             {
@@ -456,10 +494,11 @@ public class ToslaPaymentService : IToslaPaymentService
                 user.PackageType    = package.Name;
                 user.MembershipStart = now;
                 user.MembershipEnd  = now.AddDays(package.DurationDays);
-                _logger.LogInformation("Üyelik aktif | UserId={Id} | Paket={Pkg} | Bitiş={End}",
-                    userId, package.Name, user.MembershipEnd);
+                _logger.LogInformation("👑 Üyelik aktifleştiriliyor | UserId={Id} | Paket={Pkg} | Başlangıç={Start} | Bitiş={End}",
+                    userId, package.Name, user.MembershipStart, user.MembershipEnd);
             }
 
+            _logger.LogInformation("💾 PaymentHistory kaydı oluşturuluyor...");
             _dbContext.PaymentHistories.Add(new PaymentHistory
             {
                 UserId        = userId,
@@ -474,9 +513,23 @@ public class ToslaPaymentService : IToslaPaymentService
                 PaymentDate   = DateTime.UtcNow
             });
 
-            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("💾 SaveChangesAsync çağrılıyor...");
+            var changeCount = await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("✅ Veritabanı güncellendi | Değişiklik sayısı={Count} | Yeni kredi={Credits}", 
+                changeCount, user.Credits);
+
+            // Doğrulama için tekrar kontrol et
+            var verifyUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (verifyUser != null)
+            {
+                _logger.LogInformation("🔍 Doğrulama | DB'deki güncel kredi={Credits}", verifyUser.Credits);
+            }
         }
-        catch (Exception ex) { _logger.LogError(ex, "Aktivasyon hatası"); }
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, "❌ Aktivasyon hatası | OrderId={Oid} | Message={Msg}", 
+                callback.OrderId, ex.Message); 
+        }
     }
 
     private async Task SaveFailedPaymentAsync(ToslaCallbackDto callback)

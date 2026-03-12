@@ -95,8 +95,8 @@ public class PaymentController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("🔔 Tosla callback alındı - OrderId: {OrderId} | BankCode: {BankCode}",
-                callback.OrderId, callback.BankResponseCode);
+            _logger.LogInformation("🔔 Tosla callback alındı - OrderId: {OrderId} | TransactionId: {TxId} | Code: {Code} | BankCode: {BankCode} | Amount: {Amount}",
+                callback.OrderId, callback.TransactionId, callback.Code, callback.BankResponseCode, callback.Amount);
 
             var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
 
@@ -104,16 +104,25 @@ public class PaymentController : ControllerBase
 
             if (success)
             {
+                _logger.LogInformation("✅ Callback işlendi - SUCCESS | OrderId: {OrderId}", callback.OrderId);
+                
+                // Tosla'ya OK yanıtı döndür (önemli!)
+                // Eğer redirect gerekiyorsa, önce OK döndürüp sonra JavaScript ile yönlendir
+                // Ama genelde Tosla kendi 3D Secure sayfasından kullanıcıyı yönlendirir
+                
                 // Ödeme başarılı → kullanıcıyı success sayfasına yönlendir
                 return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}");
             }
 
+            _logger.LogWarning("❌ Callback işlendi - FAILED | OrderId: {OrderId} | Code: {Code}", 
+                callback.OrderId, callback.BankResponseCode);
+            
             // Ödeme başarısız → failed sayfasına yönlendir
             return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Callback işleme hatası");
+            _logger.LogError(ex, "❌ Callback işleme hatası | OrderId: {OrderId}", callback?.OrderId);
             var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
             return Redirect($"{frontendUrl}/payment/failed?error=system");
         }
