@@ -64,7 +64,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter",
             NameTr         = "Başlangıç",
             PriceUsd       = 15m,
-            PriceTry       = 1m,        // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
+            PriceTry       = 660m   ,        // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
             Credits        = 10,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -111,7 +111,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter Yıllık",
             NameTr         = "Başlangıç Yıllık",
             PriceUsd       = 99m,
-            PriceTry       = 200m,      // ⚠️ TEST FİYATI: 2 TL — canlıya geçince 3465m yap
+            PriceTry       = 365m,      // ⚠️ TEST FİYATI: 2 TL — canlıya geçince 3465m yap
             Credits        = 10,
             DurationDays   = 365,
             MaxInstallment = 2,         // TEST: 2 taksit (her biri 1 TL)
@@ -552,6 +552,17 @@ public class ToslaPaymentService : IToslaPaymentService
                     userId, oldPackage, package.Name, oldExpiry, user.MembershipEnd);
             }
 
+            // Duplicate kontrol - aynı OrderId ile başarılı bir kayıt var mı?
+            var existingHistory = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == (callback.OrderId ?? "") && p.Status == "SUCCESS");
+            
+            if (existingHistory != null)
+            {
+                _logger.LogWarning("⚠️ Bu OrderId için zaten başarılı bir PaymentHistory kaydı var, duplicate engellendi | OrderId={Oid} | ExistingId={Id}", 
+                    callback.OrderId, existingHistory.Id);
+                return; // Duplicate, işlemi sonlandır
+            }
+
             // PaymentHistory kaydı ekle
             var paymentHistory = new PaymentHistory
             {
@@ -562,14 +573,14 @@ public class ToslaPaymentService : IToslaPaymentService
                 PackageName = package.Name,
                 Amount = callback.Amount / 100m,
                 Currency = "TRY",
-                CreditsAdded = package.IsCredit ? package.Credits : 0,
+                CreditsAdded = package.Credits,  // ✅ TÜM paketler için kredi ekle (IsCredit kontrolü kaldırıldı)
                 Status = "SUCCESS",
                 PaymentDate = DateTime.UtcNow
             };
 
             _dbContext.PaymentHistories.Add(paymentHistory);
-            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL", 
-                callback.OrderId, paymentHistory.Amount);
+            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | CreditsAdded={Cred}", 
+                callback.OrderId, paymentHistory.Amount, paymentHistory.CreditsAdded);
 
             // KRİTİK: SaveChangesAsync
             _logger.LogInformation("💾 💾 💾 SaveChangesAsync ÇAĞRILIYOR...");
