@@ -525,10 +525,11 @@ public class ToslaPaymentService : IToslaPaymentService
             else
             {
                 // Üyelik paketi → üyelik süresini uzat + kredi ekle
+                var now = DateTime.UtcNow;
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
                 user.MembershipEnd = now.AddDays(package.DurationDays);
-                user.Credits += package.Credits;  // ← BU EKSIK
+                user.Credits += package.Credits;
             }
 
             // Duplicate kontrol - aynı OrderId ile başarılı bir kayıt var mı?
