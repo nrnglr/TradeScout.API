@@ -57,6 +57,7 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // ── Aylık paketler (taksit yok, MaxInstallment=1) ────────────────────
+       // ── Aylık paketler ────────────────────────────────────────────────────
         new()
         {
             ProductCode    = "1274715",
@@ -64,13 +65,13 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter",
             NameTr         = "Başlangıç",
             PriceUsd       = 15m,
-            PriceTry       = 660m   ,        // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
+            PriceTry       = 660m,
             Credits        = 10,
             DurationDays   = 30,
             MaxInstallment = 1,
             IsYearly       = false,
             IsCredit       = false,
-            Description    = "Starter Aylık Üyelik - TEST 1TL"
+            Description    = "Starter Aylık Üyelik - $15/ay"
         },
         new()
         {
@@ -79,7 +80,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Pro",
             NameTr         = "Profesyonel",
             PriceUsd       = 39m,
-            PriceTry       = 1365m,
+            PriceTry       = 1677m,
             Credits        = 40,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -94,7 +95,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Business",
             NameTr         = "İş",
             PriceUsd       = 79m,
-            PriceTry       = 2765m,
+            PriceTry       = 3225m,
             Credits        = 100,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -103,7 +104,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Description    = "Business Aylık Üyelik - $79/ay"
         },
 
-        // ── Yıllık paketler (9 veya 12 taksit seçeneği var) ─────────────────
+        // ── Yıllık paketler ──────────────────────────────────────────────────
         new()
         {
             ProductCode    = "1274716",
@@ -111,13 +112,13 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter Yıllık",
             NameTr         = "Başlangıç Yıllık",
             PriceUsd       = 99m,
-            PriceTry       = 365m,      // ⚠️ TEST FİYATI: 2 TL — canlıya geçince 3465m yap
+            PriceTry       = 4257m,
             Credits        = 10,
             DurationDays   = 365,
-            MaxInstallment = 2,         // TEST: 2 taksit (her biri 1 TL)
+            MaxInstallment = 1,
             IsYearly       = true,
             IsCredit       = false,
-            Description    = "Starter Yıllık Üyelik - TEST 2TL (2×1TL taksit)"
+            Description    = "Starter Yıllık Üyelik - $99/yıl"
         },
         new()
         {
@@ -126,13 +127,13 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Pro Yıllık",
             NameTr         = "Profesyonel Yıllık",
             PriceUsd       = 299m,
-            PriceTry       = 10465m,
+            PriceTry       = 12857m,
             Credits        = 40,
             DurationDays   = 365,
-            MaxInstallment = 12,
+            MaxInstallment = 1,
             IsYearly       = true,
             IsCredit       = false,
-            Description    = "Pro Yıllık Üyelik - $299/yıl (%36 indirim)"
+            Description    = "Pro Yıllık Üyelik - $299/yıl"
         },
         new()
         {
@@ -141,31 +142,16 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Business Yıllık",
             NameTr         = "İş Yıllık",
             PriceUsd       = 599m,
-            PriceTry       = 20965m,
+            PriceTry       = 25757m,
             Credits        = 100,
             DurationDays   = 365,
-            MaxInstallment = 12,
+            MaxInstallment = 1,
             IsYearly       = true,
             IsCredit       = false,
-            Description    = "Business Yıllık Üyelik - $599/yıl (%37 indirim)"
+            Description    = "Business Yıllık Üyelik - $599/yıl"
         },
 
-        // ── Extra Kredi paketleri (tek seferlik, taksit yok) ─────────────────
-        new()
-        {
-            ProductCode    = "1274710",
-            Alias          = "credit_10",
-            Name           = "10 Kredi",
-            NameTr         = "10 Ekstra Kredi",
-            PriceUsd       = 10m,
-            PriceTry       = 1m,        // ⚠️ TEST İÇİN 1 TL - CANLIDA 350m YAPILACAK!
-            Credits        = 10,
-            DurationDays   = 0,         // Süresiz
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = true,
-            Description    = "10 Ekstra Arama Kredisi"
-        },
+        // ── Extra Kredi paketleri ─────────────────────────────────────────────
         new()
         {
             ProductCode    = "1274725",
@@ -212,7 +198,6 @@ public class ToslaPaymentService : IToslaPaymentService
             Description    = "100 Ekstra Arama Kredisi"
         },
     };
-
     public ToslaPaymentService(
         HttpClient httpClient,
         ILogger<ToslaPaymentService> logger,

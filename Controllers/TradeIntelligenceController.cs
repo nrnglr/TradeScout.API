@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using TradeScout.API.Data;
 using TradeScout.API.DTOs;
 using TradeScout.API.Services;
 
@@ -16,15 +17,18 @@ public class TradeIntelligenceController : ControllerBase
     private readonly ITradeIntelligenceService _tradeIntelligenceService;
     private readonly IPdfExportService _pdfExportService;
     private readonly ILogger<TradeIntelligenceController> _logger;
+    private readonly ApplicationDbContext _context;
 
     public TradeIntelligenceController(
         ITradeIntelligenceService tradeIntelligenceService,
         IPdfExportService pdfExportService,
-        ILogger<TradeIntelligenceController> logger)
+        ILogger<TradeIntelligenceController> logger,
+        ApplicationDbContext context)
     {
         _tradeIntelligenceService = tradeIntelligenceService;
         _pdfExportService = pdfExportService;
         _logger = logger;
+        _context = context;
     }
 
     /// <summary>
@@ -64,6 +68,31 @@ public class TradeIntelligenceController : ControllerBase
             var userId = GetCurrentUserId();
             var ipAddress = GetClientIpAddress();
             var userAgent = Request.Headers["User-Agent"].ToString();
+
+            // Kredi kontrolü (her pazar analizi 5 kredi)
+            var requiredCredits = 5;
+            if (userId.HasValue)
+            {
+                var user = await _context.Users.FindAsync(userId.Value);
+                if (user == null)
+                    return Unauthorized(new { message = "Kullanıcı bulunamadı." });
+
+                if (user.Credits < requiredCredits)
+                {
+                    return StatusCode(402, new
+                    {
+                        message = $"Yetersiz kredi. Pazar analizi için {requiredCredits} kredi gereklidir. Mevcut: {user.Credits}",
+                        requiredCredits,
+                        availableCredits = user.Credits
+                    });
+                }
+
+                // Krediyi düş
+                user.Credits -= requiredCredits;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("💳 Pazar analizi kredisi düşüldü | UserId={UserId} | Kullanılan={Used} | Kalan={Left}",
+                    userId, requiredCredits, user.Credits);
+            }
 
             _logger.LogInformation("📊 Trade Intelligence Report request: HS={HsCode}, Product={Product}, Target={Target}, Origin={Origin}, UserId={UserId}",
                 request.HsCode, request.ProductName, request.TargetCountry, request.OriginCountry, userId);
