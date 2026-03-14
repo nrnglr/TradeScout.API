@@ -50,6 +50,8 @@ public class ScraperController : ControllerBase
     [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
     public async Task<ActionResult<ScrapeResponseDto>> ScrapeBusinesses([FromBody] ScrapeRequestDto request)
     {
+        _logger.LogWarning("🔴 [NORMAL SCRAPE] ENDPOINT ÇAĞRILDI"); // Debug log
+        
         try
         {
             // Validate request - either SearchQuery or (Category + City) is required
@@ -158,6 +160,7 @@ public class ScraperController : ControllerBase
                 }
 
                 // Kullanıcı kredisini düş (her arama 1 kredi, kaç firma bulundğundan bağımsız)
+                var creditsBefore = user.Credits;
                 var actualCreditsUsed = 1;
                 user.Credits -= actualCreditsUsed;
 
@@ -169,7 +172,8 @@ public class ScraperController : ControllerBase
 
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
+                _logger.LogInformation("� KREDİ DÜŞÜŞÜ [Normal] | UserId={UserId} | Önceki={Before} | Düşen={Used} | Kalan={After}", 
+                    userId, creditsBefore, actualCreditsUsed, user.Credits);
 
                 // Response mesajını oluştur - az firma bulunursa kullanıcıya bilgi ver
                 string responseMessage;
@@ -194,6 +198,7 @@ public class ScraperController : ControllerBase
                     Message = responseMessage,
                     TotalResults = businesses.Count,
                     CreditsUsed = actualCreditsUsed,
+                    RemainingCredits = user.Credits,
                     Businesses = businesses,
                     DownloadUrl = $"/api/scraper/download/{job.Id}"
                 };
@@ -379,6 +384,8 @@ public class ScraperController : ControllerBase
     [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
     public async Task<ActionResult<ScrapeResponseDto>> ScrapeBusinessesParallel([FromBody] ScrapeRequestDto request)
     {
+        _logger.LogWarning("🟡 [PARALLEL SCRAPE] ENDPOINT ÇAĞRILDI"); // Debug log
+        
         try
         {
             // Validate request
@@ -497,6 +504,7 @@ public class ScraperController : ControllerBase
 
                 // Deduct credits (Admin users don't lose credits)
                 // Her arama için sadece 1 kredi düş (kaç firma bulunduğundan bağımsız)
+                var creditsBefore = user.Credits;
                 var actualCreditsUsed = 1;
                 if (user.Role != "Admin")
                 {
@@ -511,7 +519,8 @@ public class ScraperController : ControllerBase
 
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("💾 Veriler kaydedildi. Kullanılan kredi: {Credits}", actualCreditsUsed);
+                _logger.LogInformation("� KREDİ DÜŞÜŞÜ [Parallel] | UserId={UserId} | Önceki={Before} | Düşen={Used} | Kalan={After}", 
+                    userId, creditsBefore, actualCreditsUsed, user.Credits);
 
                 // Response
                 var response = new ScrapeResponseDto
@@ -559,6 +568,8 @@ public class ScraperController : ControllerBase
     [ProducesResponseType(StatusCodes.Status402PaymentRequired)]
     public async Task<ActionResult<ScrapeResponseDto>> ScrapeBusinessesWithGemini([FromBody] ScrapeRequestDto request)
     {
+        _logger.LogWarning("🟢 [GEMINI SCRAPE] ENDPOINT ÇAĞRILDI"); // Debug log
+        
         try
         {
             // Validate request
@@ -684,20 +695,24 @@ public class ScraperController : ControllerBase
                 }
 
                 // ✅ SMART CREDIT DEDUCTION (at the END, only for successful enrichments)
-                // Only deduct credits for records with valid Email or Mobile (not "Not Found")
+                // Her arama sadece 1 kredi harcar (kaç firma bulunursa bulunsun)
                 var actualCreditsUsed = 0;
                 if (user.Role != "Admin")
                 {
-                    // 1 credit per successful enrichment, minimum 1 credit for the search
-                    actualCreditsUsed = Math.Max(1, successfulCount);
+                    var creditsBefore = user.Credits;
                     
-                    // Don't deduct more than user has
+                    // Her arama için sabit 1 kredi
+                    actualCreditsUsed = 1;
+                    
+                    // Kullanıcının kredisi yetmiyorsa (zaten kontrol edildi ama yine de)
                     actualCreditsUsed = Math.Min(actualCreditsUsed, user.Credits);
                     
                     user.Credits -= actualCreditsUsed;
                     
-                    _logger.LogInformation("💳 Kredi düşüldü: {CreditsUsed} ({SuccessCount} başarılı kayıt için)", 
-                        actualCreditsUsed, successfulCount);
+                    _logger.LogInformation("💳 KREDİ DÜŞÜŞÜ | UserId={UserId} | Önceki={Before} | Düşen={Used} | Kalan={After}", 
+                        userId, creditsBefore, actualCreditsUsed, user.Credits);
+                    _logger.LogInformation("📊 İşlem detayı: {TotalCount} firma bulundu, {SuccessCount} zenginleştirildi", 
+                        enrichedBusinesses.Count, successfulCount);
                 }
 
                 // Update job
@@ -735,6 +750,7 @@ public class ScraperController : ControllerBase
                     TotalResults = enrichedBusinesses.Count,
                     CreditsUsed = actualCreditsUsed,
                     Businesses = enrichedBusinesses,
+                    RemainingCredits = user.Credits,
                     DownloadUrl = enrichedBusinesses.Count > 0 ? $"/api/scraper/download/{job.Id}" : null
                 };
 

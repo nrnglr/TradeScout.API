@@ -31,6 +31,7 @@ public class ScrapeResponseDto
     public string Message { get; set; } = string.Empty;
     public int TotalResults { get; set; }
     public int CreditsUsed { get; set; }
+    public int RemainingCredits { get; set; }  // ✅ Kalan kredi bilgisi
     public List<BusinessDto> Businesses { get; set; } = new();
     public string? DownloadUrl { get; set; }
 }

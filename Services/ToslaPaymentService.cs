@@ -15,7 +15,7 @@ public interface IToslaPaymentService
     Task<bool> ProcessCallbackAsync(ToslaCallbackDto callback);
     List<FgsTradePackage> GetAvailablePackages();
     Task<ToslaInquiryResponseDto?> InquiryPaymentAsync(string orderId);
-
+    
     /// <summary>
     /// Ödemeyi Tosla'dan sorgulayıp doğrula ve kredileri yükle
     /// </summary>
@@ -47,7 +47,7 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly ILogger<ToslaPaymentService> _logger;
     private readonly ApplicationDbContext _dbContext;
 
-    private readonly long _clientId;
+    private readonly long   _clientId;
     private readonly string _apiUser;
     private readonly string _apiPass;
     private readonly string _baseUrl;
@@ -57,147 +57,162 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // ── Aylık paketler (taksit yok, MaxInstallment=1) ────────────────────
-        // ── Aylık paketler ────────────────────────────────────────────────────
         new()
         {
-            ProductCode = "1274715",
-            Alias = "starter_monthly",
-            Name = "Starter",
-            NameTr = "Başlangıç",
-            PriceUsd = 15m,
-            PriceTry = 660m,
-            Credits = 10,
-            DurationDays = 30,
+            ProductCode    = "1274715",
+            Alias          = "starter_monthly",
+            Name           = "Starter",
+            NameTr         = "Başlangıç",
+            PriceUsd       = 15m,
+            PriceTry       = 660m   ,        // ⚠️ TEST FİYATI: 1 TL — canlıya geçince 525m yap
+            Credits        = 10,
+            DurationDays   = 30,
             MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = false,
-            Description = "Starter Aylık Üyelik - $15/ay"
+            IsYearly       = false,
+            IsCredit       = false,
+            Description    = "Starter Aylık Üyelik - TEST 1TL"
         },
         new()
         {
-            ProductCode = "1274739",
-            Alias = "pro_monthly",
-            Name = "Pro",
-            NameTr = "Profesyonel",
-            PriceUsd = 39m,
-            PriceTry = 1677m,
-            Credits = 40,
-            DurationDays = 30,
+            ProductCode    = "1274739",
+            Alias          = "pro_monthly",
+            Name           = "Pro",
+            NameTr         = "Profesyonel",
+            PriceUsd       = 39m,
+            PriceTry       = 1365m,
+            Credits        = 40,
+            DurationDays   = 30,
             MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = false,
-            Description = "Pro Aylık Üyelik - $39/ay"
+            IsYearly       = false,
+            IsCredit       = false,
+            Description    = "Pro Aylık Üyelik - $39/ay"
         },
         new()
         {
-            ProductCode = "1274779",
-            Alias = "business_monthly",
-            Name = "Business",
-            NameTr = "İş",
-            PriceUsd = 79m,
-            PriceTry = 3225m,
-            Credits = 100,
-            DurationDays = 30,
+            ProductCode    = "1274779",
+            Alias          = "business_monthly",
+            Name           = "Business",
+            NameTr         = "İş",
+            PriceUsd       = 1m,
+            PriceTry       = 2765m,
+            Credits        = 100,
+            DurationDays   = 30,
             MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = false,
-            Description = "Business Aylık Üyelik - $79/ay"
-        },
-
-        // ── Yıllık paketler ──────────────────────────────────────────────────
-        new()
-        {
-            ProductCode = "1274716",
-            Alias = "starter_yearly",
-            Name = "Starter Yıllık",
-            NameTr = "Başlangıç Yıllık",
-            PriceUsd = 99m,
-            PriceTry = 4257m,
-            Credits = 10,
-            DurationDays = 365,
-            MaxInstallment = 1,
-            IsYearly = true,
-            IsCredit = false,
-            Description = "Starter Yıllık Üyelik - $99/yıl"
-        },
-        new()
-        {
-            ProductCode = "1274740",
-            Alias = "pro_yearly",
-            Name = "Pro Yıllık",
-            NameTr = "Profesyonel Yıllık",
-            PriceUsd = 299m,
-            PriceTry = 12857m,
-            Credits = 40,
-            DurationDays = 365,
-            MaxInstallment = 1,
-            IsYearly = true,
-            IsCredit = false,
-            Description = "Pro Yıllık Üyelik - $299/yıl"
-        },
-        new()
-        {
-            ProductCode = "1274780",
-            Alias = "business_yearly",
-            Name = "Business Yıllık",
-            NameTr = "İş Yıllık",
-            PriceUsd = 599m,
-            PriceTry = 25757m,
-            Credits = 100,
-            DurationDays = 365,
-            MaxInstallment = 1,
-            IsYearly = true,
-            IsCredit = false,
-            Description = "Business Yıllık Üyelik - $599/yıl"
+            IsYearly       = false,
+            IsCredit       = false,
+            Description    = "Business Aylık Üyelik - $79/ay"
         },
 
-        // ── Extra Kredi paketleri ─────────────────────────────────────────────
+        // ── Yıllık paketler (9 veya 12 taksit seçeneği var) ─────────────────
         new()
         {
-            ProductCode = "1274725",
-            Alias = "credit_25",
-            Name = "25 Kredi",
-            NameTr = "25 Ekstra Kredi",
-            PriceUsd = 20m,
-            PriceTry = 700m,
-            Credits = 25,
-            DurationDays = 0,
-            MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = true,
-            Description = "25 Ekstra Arama Kredisi"
+            ProductCode    = "1274716",
+            Alias          = "starter_yearly",
+            Name           = "Starter Yıllık",
+            NameTr         = "Başlangıç Yıllık",
+            PriceUsd       = 99m,
+            PriceTry       = 365m,      // ⚠️ TEST FİYATI: 2 TL — canlıya geçince 3465m yap
+            Credits        = 10,
+            DurationDays   = 365,
+            MaxInstallment = 2,         // TEST: 2 taksit (her biri 1 TL)
+            IsYearly       = true,
+            IsCredit       = false,
+            Description    = "Starter Yıllık Üyelik - TEST 2TL (2×1TL taksit)"
         },
         new()
         {
-            ProductCode = "1274750",
-            Alias = "credit_50",
-            Name = "50 Kredi",
-            NameTr = "50 Ekstra Kredi",
-            PriceUsd = 35m,
-            PriceTry = 1225m,
-            Credits = 50,
-            DurationDays = 0,
-            MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = true,
-            Description = "50 Ekstra Arama Kredisi"
+            ProductCode    = "1274740",
+            Alias          = "pro_yearly",
+            Name           = "Pro Yıllık",
+            NameTr         = "Profesyonel Yıllık",
+            PriceUsd       = 299m,
+            PriceTry       = 10465m,
+            Credits        = 40,
+            DurationDays   = 365,
+            MaxInstallment = 12,
+            IsYearly       = true,
+            IsCredit       = false,
+            Description    = "Pro Yıllık Üyelik - $299/yıl (%36 indirim)"
         },
         new()
         {
-            ProductCode = "1247100",
-            Alias = "credit_100",
-            Name = "100 Kredi",
-            NameTr = "100 Ekstra Kredi",
-            PriceUsd = 60m,
-            PriceTry = 2100m,
-            Credits = 100,
-            DurationDays = 0,
+            ProductCode    = "1274780",
+            Alias          = "business_yearly",
+            Name           = "Business Yıllık",
+            NameTr         = "İş Yıllık",
+            PriceUsd       = 599m,
+            PriceTry       = 20965m,
+            Credits        = 100,
+            DurationDays   = 365,
+            MaxInstallment = 12,
+            IsYearly       = true,
+            IsCredit       = false,
+            Description    = "Business Yıllık Üyelik - $599/yıl (%37 indirim)"
+        },
+
+        // ── Extra Kredi paketleri (tek seferlik, taksit yok) ─────────────────
+        new()
+        {
+            ProductCode    = "1274710",
+            Alias          = "credit_10",
+            Name           = "10 Kredi",
+            NameTr         = "10 Ekstra Kredi",
+            PriceUsd       = 10m,
+            PriceTry       = 1m,        // ⚠️ TEST İÇİN 1 TL - CANLIDA 350m YAPILACAK!
+            Credits        = 10,
+            DurationDays   = 0,         // Süresiz
             MaxInstallment = 1,
-            IsYearly = false,
-            IsCredit = true,
-            Description = "100 Ekstra Arama Kredisi"
+            IsYearly       = false,
+            IsCredit       = true,
+            Description    = "10 Ekstra Arama Kredisi"
+        },
+        new()
+        {
+            ProductCode    = "1274725",
+            Alias          = "credit_25",
+            Name           = "25 Kredi",
+            NameTr         = "25 Ekstra Kredi",
+            PriceUsd       = 20m,
+            PriceTry       = 700m,
+            Credits        = 25,
+            DurationDays   = 0,
+            MaxInstallment = 1,
+            IsYearly       = false,
+            IsCredit       = true,
+            Description    = "25 Ekstra Arama Kredisi"
+        },
+        new()
+        {
+            ProductCode    = "1274750",
+            Alias          = "credit_50",
+            Name           = "50 Kredi",
+            NameTr         = "50 Ekstra Kredi",
+            PriceUsd       = 35m,
+            PriceTry       = 1225m,
+            Credits        = 50,
+            DurationDays   = 0,
+            MaxInstallment = 1,
+            IsYearly       = false,
+            IsCredit       = true,
+            Description    = "50 Ekstra Arama Kredisi"
+        },
+        new()
+        {
+            ProductCode    = "1247100",
+            Alias          = "credit_100",
+            Name           = "100 Kredi",
+            NameTr         = "100 Ekstra Kredi",
+            PriceUsd       = 60m,
+            PriceTry       = 2100m,
+            Credits        = 100,
+            DurationDays   = 0,
+            MaxInstallment = 1,
+            IsYearly       = false,
+            IsCredit       = true,
+            Description    = "100 Ekstra Arama Kredisi"
         },
     };
+
     public ToslaPaymentService(
         HttpClient httpClient,
         ILogger<ToslaPaymentService> logger,
@@ -205,8 +220,8 @@ public class ToslaPaymentService : IToslaPaymentService
         ApplicationDbContext dbContext)
     {
         _httpClient = httpClient;
-        _logger = logger;
-        _dbContext = dbContext;
+        _logger     = logger;
+        _dbContext  = dbContext;
 
         var clientIdStr = (Environment.GetEnvironmentVariable("TOSLA_CLIENT_ID")
             ?? configuration["ToslaSettings:ClientId"] ?? "").Trim();
@@ -258,9 +273,9 @@ public class ToslaPaymentService : IToslaPaymentService
             }
 
             // Hash parametreleri (GMT+3, tek seferde üret)
-            var rnd = Random.Shared.Next(100000, 999999).ToString();
+            var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-
+            
             // Tosla Hash Formülü: apiPass + clientId + apiUser + rnd + timeSpan
             // NOT: callbackUrl hash'e DAHİL DEĞİL - sadece body'de gönderilir
             var hashInput = _apiPass + _clientId + _apiUser + rnd + timeSpan;
@@ -273,8 +288,8 @@ public class ToslaPaymentService : IToslaPaymentService
             _logger.LogInformation("HASH OUTPUT: '{Hash}'", hash);
 
             // OrderId max 20 karakter
-            var ts = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
-            var uid = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
+            var ts      = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
+            var uid     = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
             var orderId = $"FGS{ts}{uid}";
             if (orderId.Length > 20) orderId = orderId[..20];
 
@@ -283,39 +298,39 @@ public class ToslaPaymentService : IToslaPaymentService
 
             var body = new
             {
-                clientId = _clientId,
-                apiUser = _apiUser,
-                rnd = rnd,
-                timeSpan = timeSpan,
-                hash = hash,
-                orderId = orderId,
-                callbackUrl = _callbackUrl,
-                amount = amountKurus,
-                currency = 949,
+                clientId         = _clientId,
+                apiUser          = _apiUser,
+                rnd              = rnd,
+                timeSpan         = timeSpan,
+                hash             = hash,
+                orderId          = orderId,
+                callbackUrl      = _callbackUrl,
+                amount           = amountKurus,
+                currency         = 949,
                 installmentCount = installment,
-                description = $"FGSTrade - {package.NameTr}",
-                echo = $"{request.UserId}|{package.ProductCode}",
-                extraParameters = JsonSerializer.Serialize(new
+                description      = $"FGSTrade - {package.NameTr}",
+                echo             = $"{request.UserId}|{package.ProductCode}",
+                extraParameters  = JsonSerializer.Serialize(new
                 {
-                    userId = request.UserId,
+                    userId      = request.UserId,
                     productCode = package.ProductCode,
-                    credits = package.Credits,
-                    isYearly = package.IsYearly,
-                    isCredit = package.IsCredit,
-                    durationDays = package.DurationDays
+                    credits     = package.Credits,
+                    isYearly    = package.IsYearly,
+                    isCredit    = package.IsCredit,
+                    durationDays= package.DurationDays
                 })
             };
 
-            var json = JsonSerializer.Serialize(body);
+            var json    = JsonSerializer.Serialize(body);
             _logger.LogInformation("REQUEST BODY: {Json}", json);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var url = $"{_baseUrl}/threeDPayment";
+            var url     = $"{_baseUrl}/threeDPayment";
 
             _logger.LogInformation("POST → {Url} | Paket={Pkg} | Taksit={Inst} | Tutar={Amount} kuruş",
                 url, package.Name, installment, amountKurus);
 
             var response = await _httpClient.PostAsync(url, content);
-            var raw = await response.Content.ReadAsStringAsync();
+            var raw      = await response.Content.ReadAsStringAsync();
 
             _logger.LogInformation("Tosla yanıt: HTTP {Status} | {Body}",
                 (int)response.StatusCode, raw.Length > 500 ? raw[..500] : raw);
@@ -324,13 +339,13 @@ public class ToslaPaymentService : IToslaPaymentService
                 return Fail("Ödeme sistemi ile iletişim kurulamadı", ((int)response.StatusCode).ToString());
 
             using var doc = JsonDocument.Parse(raw);
-            var root = doc.RootElement;
-            var code = GetInt(root, "Code", "code");
+            var root      = doc.RootElement;
+            var code      = GetInt(root, "Code", "code");
 
             if (code == 0)
             {
-                var sessionId = GetStr(root, "ThreeDSessionId", "threeDSessionId");
-                var transactionId = GetStr(root, "TransactionId", "transactionId");
+                var sessionId     = GetStr(root, "ThreeDSessionId", "threeDSessionId");
+                var transactionId = GetStr(root, "TransactionId",   "transactionId");
 
                 if (!string.IsNullOrEmpty(sessionId))
                 {
@@ -338,9 +353,9 @@ public class ToslaPaymentService : IToslaPaymentService
                     _logger.LogInformation("✅ Ödeme URL oluşturuldu | {Url}", paymentUrl);
                     return new ToslaPaymentResponseDto
                     {
-                        Success = true,
-                        PaymentUrl = paymentUrl,
-                        TransactionId = transactionId ?? orderId,
+                        Success         = true,
+                        PaymentUrl      = paymentUrl,
+                        TransactionId   = transactionId ?? orderId,
                         ThreeDSessionId = sessionId
                     };
                 }
@@ -363,7 +378,7 @@ public class ToslaPaymentService : IToslaPaymentService
         try
         {
             _logger.LogInformation("🔔 CALLBACK ALINDI | OrderId={Oid} | Code={Code} | BankCode={Bank} | BankMsg={Msg} | Amount={Amt} | Echo={Echo}",
-                callback.OrderId, callback.Code, callback.BankResponseCode, callback.BankResponseMessage,
+                callback.OrderId, callback.Code, callback.BankResponseCode, callback.BankResponseMessage, 
                 callback.Amount, callback.Echo);
 
             if (callback.Code == 0 && callback.BankResponseCode == "00")
@@ -381,7 +396,7 @@ public class ToslaPaymentService : IToslaPaymentService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ CALLBACK HATASI | OrderId={Oid} | Message={Msg}",
+            _logger.LogError(ex, "❌ CALLBACK HATASI | OrderId={Oid} | Message={Msg}", 
                 callback.OrderId, ex.Message);
             return false;
         }
@@ -392,44 +407,44 @@ public class ToslaPaymentService : IToslaPaymentService
         try
         {
             _logger.LogInformation("🔍 Tosla Inquiry başlatılıyor | OrderId={Oid}", orderId);
-
-            var rnd = Random.Shared.Next(100000, 999999).ToString();
+            
+            var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-            var hash = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
-
+            var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
+            
             var requestBody = new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId };
-            var body = JsonSerializer.Serialize(requestBody);
-
-            _logger.LogInformation("📤 Tosla Inquiry Request | URL={Url} | Body={Body}",
+            var body     = JsonSerializer.Serialize(requestBody);
+            
+            _logger.LogInformation("📤 Tosla Inquiry Request | URL={Url} | Body={Body}", 
                 $"{_baseUrl}/inquiry", body);
-
-            var resp = await _httpClient.PostAsync($"{_baseUrl}/inquiry", new StringContent(body, Encoding.UTF8, "application/json"));
-            var raw = await resp.Content.ReadAsStringAsync();
-
-            _logger.LogInformation("📥 Tosla Inquiry Response | StatusCode={Status} | Body={Body}",
+            
+            var resp     = await _httpClient.PostAsync($"{_baseUrl}/inquiry", new StringContent(body, Encoding.UTF8, "application/json"));
+            var raw      = await resp.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation("📥 Tosla Inquiry Response | StatusCode={Status} | Body={Body}", 
                 (int)resp.StatusCode, raw);
-
+            
             if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogWarning("❌ Tosla Inquiry başarısız | StatusCode={Status} | Response={Resp}",
+                _logger.LogWarning("❌ Tosla Inquiry başarısız | StatusCode={Status} | Response={Resp}", 
                     (int)resp.StatusCode, raw);
                 return null;
             }
-
+            
             var result = JsonSerializer.Deserialize<ToslaInquiryResponseDto>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
+            
             if (result != null)
             {
-                _logger.LogInformation("✅ Tosla Inquiry başarılı | Code={Code} | Message={Msg} | TransactionCount={Count}",
+                _logger.LogInformation("✅ Tosla Inquiry başarılı | Code={Code} | Message={Msg} | TransactionCount={Count}", 
                     result.Code, result.Message, result.Transactions?.Count ?? 0);
             }
-
+            
             return result;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Tosla Inquiry hatası | OrderId={Oid} | Message={Msg}", orderId, ex.Message);
-            return null;
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, "❌ Tosla Inquiry hatası | OrderId={Oid} | Message={Msg}", orderId, ex.Message); 
+            return null; 
         }
     }
 
@@ -441,7 +456,7 @@ public class ToslaPaymentService : IToslaPaymentService
     private async Task ActivateMembershipAsync(ToslaCallbackDto callback)
     {
         _logger.LogInformation("🎯 ActivateMembershipAsync başladı | OrderId={Oid}", callback.OrderId);
-
+        
         try
         {
             string userIdStr = "";
@@ -455,7 +470,7 @@ public class ToslaPaymentService : IToslaPaymentService
                 if (orderId.StartsWith("FGS") && orderId.Length > 13)
                 {
                     userIdStr = orderId.Substring(13).TrimStart('0');
-                    _logger.LogInformation("✅ OrderId'den UserId çıkarıldı | OrderId={Oid} → UserId={Uid}",
+                    _logger.LogInformation("✅ OrderId'den UserId çıkarıldı | OrderId={Oid} → UserId={Uid}", 
                         orderId, userIdStr);
                 }
             }
@@ -463,21 +478,21 @@ public class ToslaPaymentService : IToslaPaymentService
             // Amount'dan ProductCode'u KESİN belirle
             var amountTL = callback.Amount / 100m;
             productCode = GuessProductCodeFromAmount(amountTL);
-            _logger.LogInformation("✅ Amount'dan ProductCode belirlendi | Amount={Amt} TL → ProductCode={Pc}",
+            _logger.LogInformation("✅ Amount'dan ProductCode belirlendi | Amount={Amt} TL → ProductCode={Pc}", 
                 amountTL, productCode);
 
             // UserId validation
-            if (!int.TryParse(userIdStr, out int userId))
-            {
-                _logger.LogError("❌ FATAL: UserId parse edilemedi | OrderId={Oid} | UserIdStr={Uid}",
-                    callback.OrderId, userIdStr);
-
+            if (!int.TryParse(userIdStr, out int userId)) 
+            { 
+                _logger.LogError("❌ FATAL: UserId parse edilemedi | OrderId={Oid} | UserIdStr={Uid}", 
+                    callback.OrderId, userIdStr); 
+                
                 // Son çare: PaymentHistory'den en son ödemeyi bulmaya çalış
                 var recentPayment = await _dbContext.PaymentHistories
                     .Where(p => p.OrderId == callback.OrderId || p.TransactionId == callback.TransactionId)
                     .OrderByDescending(p => p.PaymentDate)
                     .FirstOrDefaultAsync();
-
+                
                 if (recentPayment != null)
                 {
                     userId = recentPayment.UserId;
@@ -492,25 +507,25 @@ public class ToslaPaymentService : IToslaPaymentService
 
             _logger.LogInformation("👤 Kullanıcı aranıyor | UserId={Id}", userId);
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
-
-            if (user is null)
-            {
-                _logger.LogError("❌ CRITICAL: Kullanıcı bulunamadı | UserId={Id}", userId);
-                return;
+            
+            if (user is null) 
+            { 
+                _logger.LogError("❌ CRITICAL: Kullanıcı bulunamadı | UserId={Id}", userId); 
+                return; 
             }
 
-            _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}",
+            _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}", 
                 userId, user.Email, user.Credits);
 
             var package = FindPackage(productCode);
-
-            if (package is null)
-            {
-                _logger.LogError("❌ CRITICAL: Paket bulunamadı | ProductCode={Code}", productCode);
-                return;
+            
+            if (package is null) 
+            { 
+                _logger.LogError("❌ CRITICAL: Paket bulunamadı | ProductCode={Code}", productCode); 
+                return; 
             }
 
-            _logger.LogInformation("📦 Paket bulundu | ProductCode={Code} | Name={Name} | Credits={Cred} | IsCredit={IsCred} | PriceTry={Price}",
+            _logger.LogInformation("📦 Paket bulundu | ProductCode={Code} | Name={Name} | Credits={Cred} | IsCredit={IsCred} | PriceTry={Price}", 
                 package.ProductCode, package.Name, package.Credits, package.IsCredit, package.PriceTry);
 
             var oldCredits = user.Credits;
@@ -519,26 +534,31 @@ public class ToslaPaymentService : IToslaPaymentService
             {
                 // Kredi paketi → sadece kredi ekle
                 user.Credits += package.Credits;
-                _logger.LogInformation("💰 KREDİ EKLENİYOR | UserId={Id} | Eski={Old} | Eklenen={Add} | YENİ={New}",
+                _logger.LogInformation("💰 KREDİ EKLENİYOR | UserId={Id} | Eski={Old} | Eklenen={Add} | YENİ={New}", 
                     userId, oldCredits, package.Credits, user.Credits);
             }
             else
             {
-                // Üyelik paketi → üyelik süresini uzat + kredi ekle
+                // Üyelik paketi → üyelik süresini uzat
                 var now = DateTime.UtcNow;
+                var oldPackage = user.PackageType;
+                var oldExpiry = user.MembershipEnd;
+                
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
                 user.MembershipEnd = now.AddDays(package.DurationDays);
-                user.Credits += package.Credits;
+                
+                _logger.LogInformation("👑 ÜYELİK AKTİFLEŞTİRİLİYOR | UserId={Id} | Eski={OldPkg} | YENİ={NewPkg} | EskiBitiş={OldExp} | YeniBitiş={NewExp}",
+                    userId, oldPackage, package.Name, oldExpiry, user.MembershipEnd);
             }
 
             // Duplicate kontrol - aynı OrderId ile başarılı bir kayıt var mı?
             var existingHistory = await _dbContext.PaymentHistories
                 .FirstOrDefaultAsync(p => p.OrderId == (callback.OrderId ?? "") && p.Status == "SUCCESS");
-
+            
             if (existingHistory != null)
             {
-                _logger.LogWarning("⚠️ Bu OrderId için zaten başarılı bir PaymentHistory kaydı var, duplicate engellendi | OrderId={Oid} | ExistingId={Id}",
+                _logger.LogWarning("⚠️ Bu OrderId için zaten başarılı bir PaymentHistory kaydı var, duplicate engellendi | OrderId={Oid} | ExistingId={Id}", 
                     callback.OrderId, existingHistory.Id);
                 return; // Duplicate, işlemi sonlandır
             }
@@ -559,26 +579,26 @@ public class ToslaPaymentService : IToslaPaymentService
             };
 
             _dbContext.PaymentHistories.Add(paymentHistory);
-            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | CreditsAdded={Cred}",
+            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | CreditsAdded={Cred}", 
                 callback.OrderId, paymentHistory.Amount, paymentHistory.CreditsAdded);
 
             // KRİTİK: SaveChangesAsync
             _logger.LogInformation("💾 💾 💾 SaveChangesAsync ÇAĞRILIYOR...");
             var changeCount = await _dbContext.SaveChangesAsync();
-            _logger.LogInformation("✅✅✅ VERİTABANI GÜNCELLENDİ | Değişiklik Sayısı={Count} | Yeni Kredi={Credits} | Yeni Paket={Pkg}",
+            _logger.LogInformation("✅✅✅ VERİTABANI GÜNCELLENDİ | Değişiklik Sayısı={Count} | Yeni Kredi={Credits} | Yeni Paket={Pkg}", 
                 changeCount, user.Credits, user.PackageType);
 
             // DOĞRULAMA: Veritabanından tekrar oku
             await _dbContext.Entry(user).ReloadAsync();
-            _logger.LogInformation("🔍 DOĞRULAMA (DB'den yeniden okundu) | UserId={Id} | Kredi={Credits} | Paket={Pkg} | Bitiş={End}",
+            _logger.LogInformation("🔍 DOĞRULAMA (DB'den yeniden okundu) | UserId={Id} | Kredi={Credits} | Paket={Pkg} | Bitiş={End}", 
                 user.Id, user.Credits, user.PackageType, user.MembershipEnd);
 
             _logger.LogInformation("🎉🎉🎉 AKTİVASYON BAŞARILI | UserId={Id} | Kredi={Credits}", userId, user.Credits);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌❌❌ AKTİVASYON HATASI | OrderId={Oid} | Message={Msg} | StackTrace={Stack}",
-                callback.OrderId, ex.Message, ex.StackTrace);
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, "❌❌❌ AKTİVASYON HATASI | OrderId={Oid} | Message={Msg} | StackTrace={Stack}", 
+                callback.OrderId, ex.Message, ex.StackTrace); 
         }
     }
 
@@ -590,13 +610,10 @@ public class ToslaPaymentService : IToslaPaymentService
             if (!int.TryParse(userIdStr, out int userId)) return;
             _dbContext.PaymentHistories.Add(new PaymentHistory
             {
-                UserId = userId,
-                OrderId = callback.OrderId ?? "",
+                UserId = userId, OrderId = callback.OrderId ?? "",
                 TransactionId = callback.TransactionId ?? "",
-                Amount = callback.Amount / 100m,
-                Currency = "TRY",
-                Status = "FAILED",
-                PaymentDate = DateTime.UtcNow,
+                Amount = callback.Amount / 100m, Currency = "TRY",
+                Status = "FAILED", PaymentDate = DateTime.UtcNow,
                 ErrorMessage = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}"
             });
             await _dbContext.SaveChangesAsync();
@@ -613,7 +630,7 @@ public class ToslaPaymentService : IToslaPaymentService
         var exact = _packages.FirstOrDefault(p =>
             p.ProductCode == code ||
             p.Alias.Equals(code, StringComparison.OrdinalIgnoreCase) ||
-            p.Name.Equals(code, StringComparison.OrdinalIgnoreCase));
+            p.Name.Equals(code,  StringComparison.OrdinalIgnoreCase));
         if (exact != null) return exact;
 
         // Frontend'den gelen kısa isimler için fallback haritası
@@ -648,7 +665,7 @@ public class ToslaPaymentService : IToslaPaymentService
 
         if (package != null)
         {
-            _logger.LogInformation("💡 Amount'dan paket tahmin edildi | Amount={Amt} TL → {Pkg} ({Code})",
+            _logger.LogInformation("💡 Amount'dan paket tahmin edildi | Amount={Amt} TL → {Pkg} ({Code})", 
                 amountTL, package.Name, package.ProductCode);
             return package.ProductCode;
         }
@@ -686,7 +703,7 @@ public class ToslaPaymentService : IToslaPaymentService
     // ─────────────────────────────────────────────────────────────────────────
     // FRONTEND-TETİKLEMLİ ÖDEME DOĞRULAMA
     // ─────────────────────────────────────────────────────────────────────────
-
+    
     /// <summary>
     /// Frontend'den gelen verify isteği ile ödemeyi Tosla'dan sorgulayıp işle
     /// </summary>

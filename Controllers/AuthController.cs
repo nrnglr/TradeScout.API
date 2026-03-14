@@ -103,7 +103,7 @@ public class AuthController : ControllerBase
                 Phone = registerDto.Phone,
                 Website = registerDto.Website,
                 UserType = registerDto.UserType,
-                Credits = 3,
+                Credits = 2,
                 PackageType = "Free",
                 Role = "User",
                 IsActive = true,
