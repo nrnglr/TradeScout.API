@@ -79,7 +79,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Pro",
             NameTr         = "Profesyonel",
             PriceUsd       = 39m,
-            PriceTry       = 1677m,
+            PriceTry       = 10m,
             Credits        = 40,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -610,6 +610,11 @@ public class ToslaPaymentService : IToslaPaymentService
                         discountCode = dcElement.GetString();
                         _logger.LogInformation("🎟️ ExtraParameters'dan indirim kodu bulundu | Code={Code}", discountCode);
                     }
+                    if (extraParams.TryGetProperty("discountPercent", out var dpElement))
+                    {
+                        discountPercentage = dpElement.GetInt32();
+                        _logger.LogInformation("🎟️ ExtraParameters'dan indirim yüzdesi bulundu | Percent={Percent}%", discountPercentage);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -630,7 +635,13 @@ public class ToslaPaymentService : IToslaPaymentService
 
                     // Kullanım sayısını artır
                     discountCodeEntity.CurrentUses++;
-                    discountPercentage = discountCodeEntity.DiscountPercentage;
+                    
+                    // Eğer ExtraParameters'dan alınamadıysa, veritabanından al
+                    if (!discountPercentage.HasValue)
+                    {
+                        discountPercentage = discountCodeEntity.DiscountPercentage;
+                        _logger.LogInformation("🎟️ İndirim yüzdesi veritabanından alındı | Percent={Percent}%", discountPercentage);
+                    }
 
                     // Maksimum kullanım sayısına ulaşıldıysa kodu deaktif et
                     if (discountCodeEntity.CurrentUses >= discountCodeEntity.MaxUses)
