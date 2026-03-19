@@ -109,6 +109,25 @@ public class PaymentHistory
     public string? ErrorMessage { get; set; }
 
     /// <summary>
+    /// Kullanılan indirim kodu (varsa)
+    /// </summary>
+    [Column("DiscountCode")]
+    [MaxLength(50)]
+    public string? DiscountCode { get; set; }
+
+    /// <summary>
+    /// Uygulanan indirim yüzdesi
+    /// </summary>
+    [Column("DiscountPercentage")]
+    public int? DiscountPercentage { get; set; }
+
+    /// <summary>
+    /// İndirim sonrası ödenen tutar
+    /// </summary>
+    [Column("FinalAmount")]
+    public decimal? FinalAmount { get; set; }
+
+    /// <summary>
     /// Kayıt oluşturulma zamanı
     /// </summary>
     [Required]

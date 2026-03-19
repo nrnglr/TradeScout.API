@@ -30,6 +30,11 @@ public class ToslaPaymentRequestDto
     /// Taksit sayısı (yıllık paketlerde 12'ye kadar çıkabilir)
     /// </summary>
     public int Installment { get; set; } = 1;
+    
+    /// <summary>
+    /// İndirim kodu (opsiyonel)
+    /// </summary>
+    public string? DiscountCode { get; set; }
 }
 
 /// <summary>

@@ -464,6 +464,59 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Bir hata oluştu." });
         }
     }
+
+    /// <summary>
+    /// Get current user information including credits
+    /// </summary>
+    /// <returns>Current user data</returns>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> GetCurrentUser()
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst("userId")?.Value;
+            
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Geçersiz token" });
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            
+            if (user == null)
+            {
+                return NotFound(new { message = "Kullanıcı bulunamadı" });
+            }
+
+            _logger.LogInformation("👤 Kullanıcı bilgisi döndürüldü | UserId={Id} | Email={Email} | Credits={Credits}", 
+                user.Id, user.Email, user.Credits);
+
+            return Ok(new
+            {
+                id = user.Id,
+                email = user.Email,
+                fullName = user.FullName,
+                companyName = user.CompanyName,
+                credits = user.Credits,
+                packageType = user.PackageType,
+                role = user.Role,
+                membershipStart = user.MembershipStart,
+                membershipEnd = user.MembershipEnd,
+                isEmailVerified = user.IsEmailVerified,
+                maxResultsPerSearch = user.MaxResultsPerSearch,
+                createdAt = user.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ GetCurrentUser hatası");
+            return StatusCode(500, new { message = "Sistem hatası oluştu" });
+        }
+    }
 }
 
 // DTOs for password reset and email verification

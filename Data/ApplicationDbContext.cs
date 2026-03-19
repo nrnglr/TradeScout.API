@@ -19,6 +19,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Feedback> Feedbacks { get; set; }
     public DbSet<MarketAnalysis> MarketAnalyses { get; set; }
     public DbSet<PaymentHistory> PaymentHistories { get; set; }
+    public DbSet<DiscountCode> DiscountCodes { get; set; }  // ✅ İndirim kodları tablosu
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

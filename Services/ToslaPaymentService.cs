@@ -272,6 +272,33 @@ public class ToslaPaymentService : IToslaPaymentService
                 installment = Math.Clamp(request.Installment, 1, package.MaxInstallment);
             }
 
+            // İndirim kodu kontrolü ve fiyat hesaplama
+            decimal finalPrice = package.PriceTry;
+            decimal discountPercentage = 0;
+            
+            if (!string.IsNullOrWhiteSpace(request.DiscountCode))
+            {
+                var discountCode = await _dbContext.DiscountCodes
+                    .FirstOrDefaultAsync(dc => dc.Code.ToUpper() == request.DiscountCode.ToUpper());
+
+                if (discountCode != null 
+                    && discountCode.IsActive 
+                    && discountCode.CurrentUses < discountCode.MaxUses
+                    && (!discountCode.ExpiresAt.HasValue || discountCode.ExpiresAt.Value >= DateTime.UtcNow))
+                {
+                    discountPercentage = discountCode.DiscountPercentage;
+                    var discountAmount = finalPrice * discountPercentage / 100m;
+                    finalPrice = finalPrice - discountAmount;
+                    
+                    _logger.LogInformation("💰 İndirim uygulandı: {Code} | %{Percent} | Orijinal: {Original} TL | İndirimli: {Final} TL",
+                        request.DiscountCode, discountPercentage, package.PriceTry, finalPrice);
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ Geçersiz indirim kodu: {Code}", request.DiscountCode);
+                }
+            }
+
             // Hash parametreleri (GMT+3, tek seferde üret)
             var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
@@ -293,8 +320,8 @@ public class ToslaPaymentService : IToslaPaymentService
             var orderId = $"FGS{ts}{uid}";
             if (orderId.Length > 20) orderId = orderId[..20];
 
-            // Tutar: TL kuruşa çevir
-            var amountKurus = (long)(package.PriceTry * 100);
+            // Tutar: İndirimli fiyatı TL kuruşa çevir
+            var amountKurus = (long)(finalPrice * 100);
 
             var body = new
             {
@@ -312,12 +339,16 @@ public class ToslaPaymentService : IToslaPaymentService
                 echo             = $"{request.UserId}|{package.ProductCode}",
                 extraParameters  = JsonSerializer.Serialize(new
                 {
-                    userId      = request.UserId,
-                    productCode = package.ProductCode,
-                    credits     = package.Credits,
-                    isYearly    = package.IsYearly,
-                    isCredit    = package.IsCredit,
-                    durationDays= package.DurationDays
+                    userId           = request.UserId,
+                    productCode      = package.ProductCode,
+                    credits          = package.Credits,
+                    isYearly         = package.IsYearly,
+                    isCredit         = package.IsCredit,
+                    durationDays     = package.DurationDays,
+                    discountCode     = request.DiscountCode,
+                    discountPercent  = discountPercentage,
+                    originalPrice    = package.PriceTry,
+                    discountedPrice  = finalPrice
                 })
             };
 
@@ -563,6 +594,62 @@ public class ToslaPaymentService : IToslaPaymentService
                 return; // Duplicate, işlemi sonlandır
             }
 
+            // İndirim kodu kontrolü ve güncelleme
+            string? discountCode = null;
+            int? discountPercentage = null;
+            decimal finalAmount = callback.Amount / 100m;
+
+            // ExtraParameters'dan indirim kodu bilgisini çıkarmaya çalış
+            if (!string.IsNullOrEmpty(callback.ExtraParameters))
+            {
+                try
+                {
+                    var extraParams = JsonSerializer.Deserialize<JsonElement>(callback.ExtraParameters);
+                    if (extraParams.TryGetProperty("discountCode", out var dcElement))
+                    {
+                        discountCode = dcElement.GetString();
+                        _logger.LogInformation("🎟️ ExtraParameters'dan indirim kodu bulundu | Code={Code}", discountCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "ExtraParameters parse edilemedi");
+                }
+            }
+
+            // İndirim kodu varsa işle
+            if (!string.IsNullOrWhiteSpace(discountCode))
+            {
+                var discountCodeEntity = await _dbContext.DiscountCodes
+                    .FirstOrDefaultAsync(dc => dc.Code == discountCode && dc.IsActive);
+
+                if (discountCodeEntity != null)
+                {
+                    _logger.LogInformation("🎟️ İndirim kodu veritabanında bulundu | Code={Code} | CurrentUses={Uses} | MaxUses={Max}", 
+                        discountCode, discountCodeEntity.CurrentUses, discountCodeEntity.MaxUses);
+
+                    // Kullanım sayısını artır
+                    discountCodeEntity.CurrentUses++;
+                    discountPercentage = discountCodeEntity.DiscountPercentage;
+
+                    // Maksimum kullanım sayısına ulaşıldıysa kodu deaktif et
+                    if (discountCodeEntity.CurrentUses >= discountCodeEntity.MaxUses)
+                    {
+                        discountCodeEntity.IsActive = false;
+                        _logger.LogInformation("⚠️ İndirim kodu maksimum kullanım sayısına ulaştı, deaktif edildi | Code={Code} | Uses={Uses}", 
+                            discountCode, discountCodeEntity.CurrentUses);
+                    }
+
+                    _logger.LogInformation("✅ İndirim kodu kullanım sayısı güncellendi | Code={Code} | YeniUses={Uses} | Active={Active}", 
+                        discountCode, discountCodeEntity.CurrentUses, discountCodeEntity.IsActive);
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ İndirim kodu veritabanında bulunamadı veya aktif değil | Code={Code}", discountCode);
+                    discountCode = null; // Geçersiz kod, kaydetme
+                }
+            }
+
             // PaymentHistory kaydı ekle
             var paymentHistory = new PaymentHistory
             {
@@ -575,12 +662,15 @@ public class ToslaPaymentService : IToslaPaymentService
                 Currency = "TRY",
                 CreditsAdded = package.Credits,  // ✅ TÜM paketler için kredi ekle (IsCredit kontrolü kaldırıldı)
                 Status = "SUCCESS",
-                PaymentDate = DateTime.UtcNow
+                PaymentDate = DateTime.UtcNow,
+                DiscountCode = discountCode,
+                DiscountPercentage = discountPercentage,
+                FinalAmount = finalAmount
             };
 
             _dbContext.PaymentHistories.Add(paymentHistory);
-            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | CreditsAdded={Cred}", 
-                callback.OrderId, paymentHistory.Amount, paymentHistory.CreditsAdded);
+            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | DiscountCode={DC} | Discount={Disc}% | FinalAmount={Final} | CreditsAdded={Cred}", 
+                callback.OrderId, paymentHistory.Amount, paymentHistory.DiscountCode, paymentHistory.DiscountPercentage, paymentHistory.FinalAmount, paymentHistory.CreditsAdded);
 
             // KRİTİK: SaveChangesAsync
             _logger.LogInformation("💾 💾 💾 SaveChangesAsync ÇAĞRILIYOR...");

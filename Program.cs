@@ -305,5 +305,32 @@ app.MapGet("/", () => new
 
 app.MapControllers();
 
+// ===== SEED DISCOUNT CODES (İlk çalıştırmada) =====
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    
+    // Migration çalıştır
+    try
+    {
+        await context.Database.MigrateAsync();
+        Console.WriteLine("✅ Database migrations tamamlandı");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ Migration hatası: {ex.Message}");
+    }
+    
+    // İndirim kodlarını ekle
+    try
+    {
+        await TradeScout.API.Scripts.DiscountCodeSeeder.SeedDiscountCodesAsync(context);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠️ Discount code seed hatası: {ex.Message}");
+    }
+}
+
 // ===== RUN APPLICATION =====
 app.Run();
