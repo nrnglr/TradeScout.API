@@ -64,7 +64,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter",
             NameTr         = "Başlangıç",
             PriceUsd       = 15m,
-            PriceTry       = 1m,
+            PriceTry       = 645m,
             Credits        = 10,
             DurationDays   = 30,
             MaxInstallment = 1,
