@@ -633,17 +633,29 @@ public class ToslaPaymentService : IToslaPaymentService
             else
             {
                 // Üyelik paketi → üyelik süresini uzat VE kredileri ekle
-                var now = DateTime.UtcNow;
+                var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
                 var oldPackage = user.PackageType;
                 var oldExpiry = user.MembershipEnd;
                 oldCredits = user.Credits; // ← mevcut krediyi sakla // ← mevcut krediyi sakla (üstteki oldCredits'i gölgeliyor, ayrı değişken)
 
                 user.PackageType    = package.Name;
                 user.MembershipStart = now;
-                user.MembershipEnd  = now.AddDays(package.DurationDays);
+                user.MembershipEnd   = DateTime.SpecifyKind(now.AddDays(package.DurationDays), DateTimeKind.Utc);
 
                 // FIX #1 & #2: Üyelik paketleri de kredi içerir; mutlaka ekle
                 user.Credits += package.Credits;
+
+                // Eğer kullanıcı paket satın aldıysa (üyelik paketi), arama limitini 200'e yükselt
+                try
+                {
+                    var oldMax = user.MaxResultsPerSearch;
+                    user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
+                    _logger.LogInformation("🔼 MaxResultsPerSearch güncellendi | UserId={Id} | Eski={Old} | Yeni={New}", userId, oldMax, user.MaxResultsPerSearch);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️ MaxResultsPerSearch güncellenirken hata oluştu | UserId={Id}", userId);
+                }
 
                 _logger.LogInformation(
                     "👑 ÜYELİK + KREDİ AKTİFLEŞTİRİLİYOR | UserId={Id} | Eski={OldPkg} → YENİ={NewPkg} | " +
