@@ -11,7 +11,9 @@ public class AuthResponseDto
     public int Credits { get; set; }
     public string Role { get; set; } = string.Empty;
     public string PackageType { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
+
 public class GoogleLoginRequest
 {
     public string AccessToken { get; set; }

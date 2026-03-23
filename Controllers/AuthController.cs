@@ -126,7 +126,8 @@ public class AuthController : ControllerBase
                 Email = user.Email,
                 Credits = user.Credits,
                 Role = user.Role,
-                PackageType = user.PackageType
+                PackageType = user.PackageType,
+                CreatedAt = user.CreatedAt
             };
 
             _logger.LogInformation("Yeni kullanıcı kaydedildi: {Email}", user.Email);
@@ -198,7 +199,8 @@ public class AuthController : ControllerBase
                 Email = user.Email,
                 Credits = user.Credits,
                 Role = user.Role,
-                PackageType = user.PackageType
+                PackageType = user.PackageType,
+                CreatedAt = user.CreatedAt
             };
 
             _logger.LogInformation("Kullanıcı giriş yaptı: {Email}", user.Email);
