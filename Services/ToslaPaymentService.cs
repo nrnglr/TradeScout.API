@@ -64,7 +64,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Starter",
             NameTr         = "Başlangıç",
             PriceUsd       = 15m,
-            PriceTry       = 645m,
+            PriceTry       = 1m,
             Credits        = 10,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -79,7 +79,7 @@ public class ToslaPaymentService : IToslaPaymentService
             Name           = "Pro",
             NameTr         = "Profesyonel",
             PriceUsd       = 39m,
-            PriceTry       = 10m,
+            PriceTry       = 1677m,
             Credits        = 40,
             DurationDays   = 30,
             MaxInstallment = 1,
@@ -506,11 +506,52 @@ public class ToslaPaymentService : IToslaPaymentService
                 }
             }
 
-            // Amount'dan ProductCode'u KESİN belirle
+            // FIX #3: ProductCode belirleme öncelik sırası:
+            //   1. echo alanı → "userId|productCode" formatı
+            //   2. extraParameters JSON içindeki "productCode" alanı
+            //   3. Son çare: fiyata göre tahmin (indirim varsa yanlış sonuç verebilir, sadece fallback)
             var amountTL = callback.Amount / 100m;
-            productCode = GuessProductCodeFromAmount(amountTL);
-            _logger.LogInformation("✅ Amount'dan ProductCode belirlendi | Amount={Amt} TL → ProductCode={Pc}", 
-                amountTL, productCode);
+
+            // 1. Echo'dan ProductCode çıkar
+            if (!string.IsNullOrWhiteSpace(callback.Echo))
+            {
+                var echoParts = callback.Echo.Split('|');
+                if (echoParts.Length >= 2 && !string.IsNullOrWhiteSpace(echoParts[1]))
+                {
+                    productCode = echoParts[1].Trim();
+                    _logger.LogInformation("✅ Echo'dan ProductCode alındı | Echo={Echo} → ProductCode={Pc}", callback.Echo, productCode);
+                }
+            }
+
+            // 2. ExtraParameters'dan ProductCode çıkar (echo yoksa veya boşsa)
+            if (string.IsNullOrWhiteSpace(productCode) && !string.IsNullOrWhiteSpace(callback.ExtraParameters))
+            {
+                try
+                {
+                    var extra = JsonSerializer.Deserialize<JsonElement>(callback.ExtraParameters);
+                    if (extra.TryGetProperty("productCode", out var pcElement))
+                    {
+                        var pcFromExtra = pcElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(pcFromExtra))
+                        {
+                            productCode = pcFromExtra.Trim();
+                            _logger.LogInformation("✅ ExtraParameters'dan ProductCode alındı | ProductCode={Pc}", productCode);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "ExtraParameters'dan ProductCode çıkarılamadı");
+                }
+            }
+
+            // 3. Son çare: fiyata göre tahmin (indirim kodlu ödemelerde yanlış sonuç verebilir!)
+            if (string.IsNullOrWhiteSpace(productCode))
+            {
+                _logger.LogWarning("⚠️ Echo ve ExtraParameters'dan ProductCode alınamadı, fiyata göre tahmin yapılıyor | Amount={Amt} TL — indirim varsa yanlış paket seçilebilir!", amountTL);
+                productCode = GuessProductCodeFromAmount(amountTL);
+                _logger.LogInformation("⚠️ Tahmin edilen ProductCode={Pc}", productCode);
+            }
 
             // UserId validation
             if (!int.TryParse(userIdStr, out int userId)) 
@@ -536,13 +577,23 @@ public class ToslaPaymentService : IToslaPaymentService
                 }
             }
 
-            _logger.LogInformation("👤 Kullanıcı aranıyor | UserId={Id}", userId);
-            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            
-            if (user is null) 
-            { 
-                _logger.LogError("❌ CRITICAL: Kullanıcı bulunamadı | UserId={Id}", userId); 
-                return; 
+            User? user = null;
+            try
+            {
+                _logger.LogInformation("👤 Kullanıcı aranıyor (FindAsync) | UserId={Id}", userId);
+                var userEntry = await _dbContext.Users.FindAsync(userId);
+                user = userEntry is null ? null : userEntry;
+
+                if (user is null)
+                {
+                    _logger.LogError("❌ CRITICAL: Kullanıcı bulunamadı | UserId={Id}", userId);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Kullanıcı veritabanından çekilirken hata | UserId={Id}", userId);
+                return;
             }
 
             _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}", 
@@ -567,20 +618,51 @@ public class ToslaPaymentService : IToslaPaymentService
                 user.Credits += package.Credits;
                 _logger.LogInformation("💰 KREDİ EKLENİYOR | UserId={Id} | Eski={Old} | Eklenen={Add} | YENİ={New}", 
                     userId, oldCredits, package.Credits, user.Credits);
+
+                try
+                {
+                    _dbContext.Users.Update(user);
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation("✅ Kullanıcı kredileri veritabanına kaydedildi | UserId={Id} | Credits={Credits}", userId, user.Credits);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Kullanıcı kredileri kaydedilirken hata oluştu | UserId={Id}", userId);
+                }
             }
             else
             {
-                // Üyelik paketi → üyelik süresini uzat
+                // Üyelik paketi → üyelik süresini uzat VE kredileri ekle
                 var now = DateTime.UtcNow;
                 var oldPackage = user.PackageType;
                 var oldExpiry = user.MembershipEnd;
-                
-                user.PackageType = package.Name;
+                oldCredits = user.Credits; // ← mevcut krediyi sakla // ← mevcut krediyi sakla (üstteki oldCredits'i gölgeliyor, ayrı değişken)
+
+                user.PackageType    = package.Name;
                 user.MembershipStart = now;
-                user.MembershipEnd = now.AddDays(package.DurationDays);
-                
-                _logger.LogInformation("👑 ÜYELİK AKTİFLEŞTİRİLİYOR | UserId={Id} | Eski={OldPkg} | YENİ={NewPkg} | EskiBitiş={OldExp} | YeniBitiş={NewExp}",
-                    userId, oldPackage, package.Name, oldExpiry, user.MembershipEnd);
+                user.MembershipEnd  = now.AddDays(package.DurationDays);
+
+                // FIX #1 & #2: Üyelik paketleri de kredi içerir; mutlaka ekle
+                user.Credits += package.Credits;
+
+                _logger.LogInformation(
+                    "👑 ÜYELİK + KREDİ AKTİFLEŞTİRİLİYOR | UserId={Id} | Eski={OldPkg} → YENİ={NewPkg} | " +
+                    "EskiBitiş={OldExp} → YeniBitiş={NewExp} | EskiKredi={OldCred} + Eklenen={Add} = YeniKredi={NewCred}",
+                    userId, oldPackage, package.Name, oldExpiry, user.MembershipEnd,
+                    oldCredits, package.Credits, user.Credits);
+
+                try
+                {
+                    _dbContext.Users.Update(user);
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation(
+                        "✅ Kullanıcı üyelik + kredi bilgileri kaydedildi | UserId={Id} | Package={Pkg} | MembershipEnd={End} | Credits={Cred}",
+                        userId, user.PackageType, user.MembershipEnd, user.Credits);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "❌ Kullanıcı üyelik/kredi bilgileri kaydedilirken hata | UserId={Id}", userId);
+                }
             }
 
             // Duplicate kontrol - aynı OrderId ile başarılı bir kayıt var mı?
