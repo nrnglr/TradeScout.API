@@ -304,3 +304,19 @@ public class AddNoteRequest
 {
     public string Note { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// ChartData dahil PDF dönüştürme için genişletilmiş request
+/// (ConvertToPdfRequest'i override eder — ChartData alanı eklendi)
+/// </summary>
+public class ConvertToPdfRequest
+{
+    public string? ReportContent { get; set; }
+    public string? MarkdownContent { get; set; }
+    public string? HsCode { get; set; }
+    public string? ProductName { get; set; }
+    public string? TargetCountry { get; set; }
+    public string? OriginCountry { get; set; }
+    public string? GetContent() =>
+        ReportContent ?? MarkdownContent;
+}

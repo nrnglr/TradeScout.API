@@ -41,6 +41,11 @@ public interface ITradeIntelligenceService
     /// Analize not ekle
     /// </summary>
     Task<bool> AddNoteAsync(int analysisId, int userId, string note);
+
+    /// <summary>
+    /// Kullanıcının 30 günlük ücretsiz deneme süresinde olup olmadığını kontrol et
+    /// </summary>
+    bool IsInFreeTrial(int userId);
 }
 
 /// <summary>
@@ -64,6 +69,9 @@ public class TradeIntelligenceService : ITradeIntelligenceService
         _httpClient = httpClient;
         _logger = logger;
         _dbContext = dbContext;
+
+        // Gemini uzun yanıt verebiliyor — 5 dakika timeout
+        _httpClient.Timeout = TimeSpan.FromMinutes(5);
 
         // Load API keys from environment and configuration
         _apiKeys = LoadApiKeys(configuration);
@@ -207,406 +215,133 @@ public class TradeIntelligenceService : ITradeIntelligenceService
 
     private string BuildPrompt(TradeIntelligenceRequestDto request)
     {
-        var selectedLanguage = request.Language ?? "Türkçe";
-        
-        return $@"
-Sen profesyonel bir global ticaret analistisin. Dünya Ticaret Örgütü (WTO) ve ITC Trade Map verilerine hakimsin.
-Sen dünyanın önde gelen ticaret müşavirleri ve pazar stratejistleri seviyesinde bir yapay zekasın. Görevin, aşağıda belirtilen ürün ve hedef pazar için hiçbir yerde bulunmayan derinlikte, veriye dayalı ve stratejik bir 'İhracat Yol Haritası' hazırlamaktır.
+        var lang = request.Language ?? "Türkçe";
+        var origin = request.OriginCountry ?? "Türkiye";
+        var today = DateTime.UtcNow.ToString("dd MMMM yyyy");
 
-**Analiz Parametreleri:**
-- HS Code (GTIP): {request.HsCode}
+        return $@"Sen WTO ve ITC Trade Map uzmanı küresel ticaret analistisin.
+Aşağıdaki ürün ve pazar için kapsamlı bir İhracat Yol Haritası Raporu yaz.
+
+PARAMETRELER:
+- HS Code: {request.HsCode}
 - Ürün: {request.ProductName}
-**Parametreler:**
-- Ürün HS Code (GTIP): {request.HsCode}
-- Ürün Adı: {request.ProductName}
 - Hedef Pazar: {request.TargetCountry}
-- Menşei Ülke: {request.OriginCountry}
-- Rapor Dili: {selectedLanguage} (Raporun tamamı, tablolar dahil bu dilde olmalıdır.)
-- Menşei Ülke: {request.OriginCountry ?? "Türkiye"}
-- Rapor Tarihi: {DateTime.UtcNow:dd MMMM yyyy}
+- Menşei: {origin}
+- Dil: {lang}
+- Tarih: {today}
 
-**Analiz Kuralları:**
-1. Vergi hesaplamalarını {request.OriginCountry} menşeli bir ürünün {request.TargetCountry} pazarına girişi üzerinden yap
-2. Pazar hacmi verilerini son 3 yılı kapsayacak şekilde (2023-2025) oluştur
-3. Lojistik kısmında {request.OriginCountry}'den {request.TargetCountry}'ye en uygun taşıma modlarını analiz et
-4. ASCII sanat çizgileri (===, ---, ***, ~~~) KULLANMA - sadece Markdown formatı
-5. Raporun sonuna mutlaka JSON ChartData bloğu ekle
----
+YAZIM KURALLARI:
+- Tüm içerik {lang} dilinde olacak
+- Tablolarda gerçek sayısal veriler kullan, boş bırakma
+- Her bölüm en az 3-4 paragraf içersin
+- Markdown tablo formatı: | Başlık | Başlık | şeklinde, ayraç satırı: |---|---|
+- Asla sadece tire veya boşluktan oluşan satır yazma
 
-# {request.ProductName} - {request.TargetCountry} Pazar Analizi Raporu
+RAPOR YAPISI (sırayla yaz):
+
 # {request.ProductName} - {request.TargetCountry} İhracat Yol Haritası
 
-**GTIP Kodu:** {request.HsCode}  
-**Hedef Pazar:** {request.TargetCountry}  
-**Menşei Ülke:** {request.OriginCountry}  
-**Menşei Ülke:** {request.OriginCountry ?? "Türkiye"}  
-**Rapor Tarihi:** {DateTime.UtcNow:dd MMMM yyyy}
-
-## 1. İthalat Vergi Yapısı ve Maliyet Analizi
----
+**GTIP:** {request.HsCode} | **Hedef:** {request.TargetCountry} | **Menşei:** {origin} | **Tarih:** {today}
 
 ## 1. Gümrük ve Mevzuat Analizi
 
-{request.TargetCountry} pazarına {request.OriginCountry} menşeli ürün girişi için vergi yapısı:
 ### 1.1 Ticaret Anlaşmaları
-{request.OriginCountry ?? "Türkiye"} ile {request.TargetCountry} arasındaki ticaret anlaşmalarını (STA, Gümrük Birliği, tercihli ticaret anlaşmaları vb.) detaylı analiz et.
+{origin} ile {request.TargetCountry} arasındaki ticaret anlaşmalarını (STA, GB, tercihli vb.) analiz et.
 
-| Vergi Türü | Oran (%) | Tutar (USD) | Açıklama |
-|------------|----------|-------------|----------|
 ### 1.2 Vergi Yapısı
+Gümrük Vergisi, KDV, ÖTV, Anti-Damping, Diğer Vergiler ve Toplam Vergi Yükü için gerçek oranlarla tablo yaz.
+Tablo formatı: | Vergi Türü | Oran (%) | Açıklama |
 
-| Vergi Türü | Normal Oran (%) | Anlaşma Kapsamında (%) | Açıklama |
-|------------|-----------------|------------------------|----------|
-| Gümrük Vergisi | X | X | Detay |
-| KDV | X | X | Detay |
-| ÖTV | X | X | Varsa |
-| Anti-Damping | X | X | Varsa |
-| **Toplam Vergi Yükü** | X | X | Toplam |
-| Diğer Vergiler | X | X | Varsa |
+### 1.3 Teknik Sertifikalar
+Zorunlu sertifikaları tablo olarak listele.
+Tablo formatı: | Sertifika | Zorunluluk | Süre | Tahmini Maliyet (USD) |
 
-### 1.3 Teknik Sertifikalar ve Standartlar
-
-**Örnek Maliyet Simülasyonu (10.000 USD FOB değerinde ürün):**
-| Sertifika/Standart | Zorunluluk | Geçerlilik Süresi | Açıklama |
-|--------------------|------------|-------------------|----------|
-| CE Belgesi | Evet/Hayır | X yıl | Detay |
-| ISO Standartları | Evet/Hayır | X yıl | Detay |
-| Yerel Standartlar | Evet/Hayır | X yıl | Detay |
-| Diğer | Evet/Hayır | X yıl | Detay |
-
-### 1.4 Maliyet Simülasyonu (10.000 USD FOB Değerinde Ürün)
-
-| Kalem | Tutar (USD) |
-|-------|-------------|
-| FOB Değeri | 10.000 |
-| Navlun + Sigorta | X |
-| Navlun | X |
-| Sigorta | X |
-| CIF Değeri | X |
-| Gümrük Vergisi | X |
-| KDV | X |
-| Diğer Vergiler | X |
-| **Toplam Landed Cost** | X |
-| **Toplam Landed Cost** | **X** |
-
----
+### 1.4 Landed Cost Simülasyonu (10.000 USD FOB)
+FOB, Navlun, Sigorta, CIF, Gümrük, KDV, Diğer, Toplam Landed Cost, %20 Kar Marjı, Önerilen Satış Fiyatı değerlerini hesaplayıp tablo yaz.
+Tablo formatı: | Kalem | Tutar (USD) | Açıklama |
 
 ## 2. Pazar Hacmi ve Trendler
-## 2. Pazar Dinamikleri ve Talep
 
-{request.TargetCountry} pazarının son 3 yıllık ithalat verileri:
-### 2.1 İthalat Hacmi Trendi (Son 3 Yıl)
-
-| Yıl | İthalat (Milyon USD) | Değişim (%) | Açıklama |
-|-----|---------------------|-------------|----------|
-| Yıl | İthalat Hacmi (Milyon USD) | Değişim (%) | Önemli Gelişmeler |
-|-----|---------------------------|-------------|-------------------|
-| 2023 | X | - | Baz yıl |
-| 2024 | X | X% | Trend açıklaması |
-| 2025 | X | X% | Trend açıklaması |
-| 2024 | X | X% | Açıklama |
-| 2025 | X | X% | Açıklama |
-
-**CAGR (Bileşik Yıllık Büyüme Oranı):** X%
+### 2.1 İthalat Trendi (2023-2025)
+3 yıl için tablo yaz: | Yıl | İthalat (Milyon USD) | Değişim (%) | Açıklama |
+Ardından CAGR hesapla.
 
 ### 2.2 Tüketici Davranışları ve Kültürel Faktörler
-
-- **Tüketici Tercihleri:** Detaylı açıklama
-- **Kültürel Etkiler:** Detaylı açıklama
-- **Ekonomik Faktörler:** Detaylı açıklama
-- **Mevsimsel Etkiler:** Detaylı açıklama
+Tüketici tercihleri, kültürel etkiler, ekonomik faktörler, mevsimsel etkiler hakkında detaylı yaz.
 
 ### 2.3 Pazar Büyüklüğü ve Potansiyel
-
-- **Toplam Pazar Büyüklüğü:** X Milyon USD
-- **Yıllık Büyüme Potansiyeli:** X%
-- **{request.OriginCountry ?? "Türkiye"} için Erişilebilir Pazar:** X Milyon USD
-
----
-
-## 3. Rekabet ve Fiyatlandırma
-
-### 3.1 Rakip Ülke Analizi
-
-| Sıra | Ülke | Pazar Payı (%) | İthalat (Milyon USD) | Rekabet Stratejisi | Güçlü Yönleri |
-|------|------|----------------|---------------------|-------------------|---------------|
-| 1 | X | X | X | X | X |
-| 2 | X | X | X | X | X |
-| 3 | X | X | X | X | X |
-
-**CAGR (Bileşik Yıllık Büyüme):** X%
-### 3.2 {request.OriginCountry ?? "Türkiye"}'nin Mevcut Konumu
-
-**Pazar Büyüklüğü:** X Milyon USD (2025)
-- **Mevcut Pazar Payı:** X%
-- **Güçlü Yönler:** Madde listesi
-- **Zayıf Yönler:** Madde listesi
-- **Rakiplere Göre Avantajlar:** Madde listesi
-
-**Pazar Trendleri:**
-- Trend 1: Açıklama
-- Trend 2: Açıklama
-- Trend 3: Açıklama
-### 3.3 Fiyat Segmentasyonu
+Toplam pazar büyüklüğü, büyüme potansiyeli ve {origin} için erişilebilir pazar (SAM) değerlerini belirt.
 
 ## 3. Rekabet ve Pazar Payı
-| Segment | Fiyat Aralığı (USD) | Fiyat Aralığı ({request.TargetCountry} Yerel Para) | Hedef Kitle | Pazar Payı (%) |
-|---------|---------------------|---------------------------------------------------|-------------|----------------|
-| Ekonomik | X - X | X - X | Açıklama | X |
-| Orta | X - X | X - X | Açıklama | X |
-| Premium | X - X | X - X | Açıklama | X |
 
-{request.TargetCountry} pazarında tedarikçi ülkelerin pazar payları:
-**Önerilen Giriş Segmenti:** X
-**Gerekçe:** Detaylı açıklama
+### 3.1 Rakip Ülke Analizi
+İlk 5 rakibi tablo olarak yaz: | Sıra | Ülke | Pazar Payı (%) | İthalat (M USD) | Strateji | Güçlü Yönler |
+Son satırda {origin} yer alsın.
 
----
+### 3.2 {origin} Konumu
+Mevcut pazar payı, güçlü/zayıf yönler ve avantajları yaz.
+
+### 3.3 Fiyat Segmentasyonu
+Ekonomik/Orta/Premium segmentleri tablo olarak yaz: | Segment | Fiyat Aralığı USD | Fiyat Yerel Para | Hedef Kitle | Pazar Payı % |
+Önerilen giriş segmenti ve gerekçesi.
 
 ## 4. Lojistik ve Tedarik Zinciri
 
-### 4.1 Taşıma Modları Karşılaştırması
+### 4.1 Taşıma Modları
+Karayolu/Denizyolu/Havayolu/Demiryolu için tablo: | Mod | Süre (Gün) | Maliyet USD/Ton | Avantajlar | Dezavantajlar | Uygunluk |
 
-| Taşıma Modu | Süre (Gün) | Maliyet (USD/Ton) | Avantajlar | Dezavantajlar | Uygunluk |
-|-------------|------------|-------------------|------------|---------------|----------|
-| Karayolu | X | X | X | X | Yüksek/Orta/Düşük |
-| Denizyolu | X | X | X | X | Yüksek/Orta/Düşük |
-| Havayolu | X | X | X | X | Yüksek/Orta/Düşük |
-| Demiryolu | X | X | X | X | Yüksek/Orta/Düşük |
-
-### 4.2 Önerilen Lojistik Rotası
-
-- **Ana Rota:** {request.OriginCountry ?? "Türkiye"} → X → {request.TargetCountry}
-- **Alternatif Rota:** {request.OriginCountry ?? "Türkiye"} → X → {request.TargetCountry}
-- **Tahmini Toplam Süre:** X gün
-- **Tahmini Toplam Maliyet:** X USD/Ton
+### 4.2 Önerilen Rotalar
+Ana rota ve alternatif rotaları süre ve maliyet ile birlikte açıkla.
 
 ### 4.3 Gümrük İşlemleri
+Ortalama gümrükleme süresi, zorunlu belgeler, dikkat edilmesi gerekenler.
 
-| Sıra | Ülke | Pazar Payı (%) | İthalat (Milyon USD) | Rekabet Avantajı |
-|------|------|----------------|---------------------|------------------|
-| 1 | Ülke1 | X | X | Avantaj |
-| 2 | Ülke2 | X | X | Avantaj |
-| 3 | Ülke3 | X | X | Avantaj |
-| 4 | Ülke4 | X | X | Avantaj |
-| 5 | {request.OriginCountry} | X | X | Avantaj |
-- **Ortalama Gümrükleme Süresi:** X iş günü
-- **Gerekli Belgeler:** Liste
-- **Dikkat Edilmesi Gerekenler:** Liste
-
-**{request.OriginCountry} SWOT Analizi:**
----
-
-| Güçlü Yönler | Zayıf Yönler |
-|--------------|--------------|
 ## 5. Stratejik SWOT Analizi
 
-### 5.1 {request.OriginCountry ?? "Türkiye"}li İhracatçılar İçin SWOT
+### 5.1 SWOT Tablosu
+İki tablo yaz:
+Tablo 1: | Güçlü Yönler | Zayıf Yönler | (4 satır)
+Tablo 2: | Fırsatlar | Tehditler | (4 satır)
 
-| Güçlü Yönler (Strengths) | Zayıf Yönler (Weaknesses) |
-|--------------------------|---------------------------|
-| + Madde 1 | - Madde 1 |
-| + Madde 2 | - Madde 2 |
-| + Madde 3 | - Madde 3 |
-| + Madde 4 | - Madde 4 |
-
-| Fırsatlar | Tehditler |
-|-----------|-----------|
-| Fırsatlar (Opportunities) | Tehditler (Threats) |
-|---------------------------|---------------------|
-| + Madde 1 | - Madde 1 |
-| + Madde 2 | - Madde 2 |
-| + Madde 3 | - Madde 3 |
-| + Madde 4 | - Madde 4 |
-
-## 4. Lojistik ve Taşımacılık Analizi
 ### 5.2 Risk Analizi
+Tablo: | Risk | Seviye | Açıklama | Önlem | — Kur, Siyasi, Ticaret, Rekabet, Tedarik riskleri.
 
-{request.OriginCountry}'den {request.TargetCountry}'ye taşıma seçenekleri:
-| Risk Türü | Seviye | Açıklama | Önlem |
-|-----------|--------|----------|-------|
-| Kur Riski | Yüksek/Orta/Düşük | Detay | Öneri |
-| Siyasi Risk | Yüksek/Orta/Düşük | Detay | Öneri |
-| Ticaret Engelleri | Yüksek/Orta/Düşük | Detay | Öneri |
-| Rekabet Riski | Yüksek/Orta/Düşük | Detay | Öneri |
-
-| Taşıma Modu | Süre (Gün) | Tahmini Maliyet (USD/Ton) | Uygunluk |
-|-------------|------------|---------------------------|----------|
-| Karayolu | X | X | Açıklama |
-| Denizyolu | X | X | Açıklama |
-| Havayolu | X | X | Açıklama |
-| Demiryolu | X | X | Açıklama |
----
-
-**Önerilen Taşıma Modu:** X - Gerekçe
 ## 6. Mevsimsel Talep Analizi
-
-**Ana Lojistik Rotalar:**
-- Rota 1: Çıkış - Varış noktaları
-- Rota 2: Alternatif rota
-| Dönem | Talep Seviyesi (1-10) | Açıklama | Öneri |
-|-------|----------------------|----------|-------|
-| Ocak-Mart (Q1) | X | Neden | Strateji |
-| Nisan-Haziran (Q2) | X | Neden | Strateji |
-| Temmuz-Eylül (Q3) | X | Neden | Strateji |
-| Ekim-Aralık (Q4) | X | Neden | Strateji |
-
-**Gümrük İşlemleri Süresi:** X-X iş günü
-**En Yoğun Dönem:** X
-**Stok Hazırlık Önerisi:** X
-
-## 5. Mevsimsel Talep Analizi
----
-
-{request.TargetCountry} pazarında {request.ProductName} için aylık talep dağılımı:
-## 7. Stratejik Öneriler ve Aksiyon Planı
-
-| Dönem | Talep Seviyesi | Açıklama |
-|-------|----------------|----------|
-| Ocak-Mart (Q1) | Düşük/Orta/Yüksek | Neden |
-| Nisan-Haziran (Q2) | Düşük/Orta/Yüksek | Neden |
-| Temmuz-Eylül (Q3) | Düşük/Orta/Yüksek | Neden |
-| Ekim-Aralık (Q4) | Düşük/Orta/Yüksek | Neden |
-### 7.1 Kısa Vadeli Aksiyonlar (0-6 Ay)
-1. Aksiyon detayı
-2. Aksiyon detayı
-3. Aksiyon detayı
-
-**En Yoğun Satış Dönemi:** X ayları
-**Stok Hazırlık Önerisi:** X aylarında stok artırımı
-### 7.2 Orta Vadeli Aksiyonlar (6-12 Ay)
-1. Aksiyon detayı
-2. Aksiyon detayı
-3. Aksiyon detayı
-
-## 6. Fiyatlandırma Stratejisi
-### 7.3 Uzun Vadeli Aksiyonlar (12+ Ay)
-1. Aksiyon detayı
-2. Aksiyon detayı
-3. Aksiyon detayı
-
-| Segment | Fiyat Aralığı (USD) | Hedef Kitle | Pazar Payı (%) |
-|---------|---------------------|-------------|----------------|
-| Ekonomik | X - X | Açıklama | X |
-| Orta | X - X | Açıklama | X |
-| Premium | X - X | Açıklama | X |
-
-**Başarı Şansı:** X%
-**Gerekçe:** Detaylı açıklama
----
-
-**Önerilen Giriş Stratejisi:** Strateji adı
-- Detay 1
-- Detay 2
-- Detay 3
+Tablo: | Dönem | Talep (1-10) | Açıklama | Öneri | — Q1/Q2/Q3/Q4 için.
+En yoğun dönem ve stok önerisi.
 
 ## 7. Stratejik Öneriler
-## 8. Sonuç ve Genel Değerlendirme
 
-1. **Öneri 1:** Detaylı açıklama
-2. **Öneri 2:** Detaylı açıklama
-3. **Öneri 3:** Detaylı açıklama
-4. **Öneri 4:** Detaylı açıklama
-5. **Öneri 5:** Detaylı açıklama
-Kapsamlı değerlendirme paragrafı yazarak pazar potansiyeli, riskler ve fırsatları özetle.
+### 7.1 Kısa Vadeli (0-6 Ay)
+En az 5 madde.
 
-## 8. Sonuç ve Genel Değerlendirme
-**Genel Tavsiye:** İlerle / Dikkatli Ol / Bekle
+### 7.2 Orta Vadeli (6-12 Ay)
+En az 5 madde.
 
-Kapsamlı değerlendirme paragrafı - pazar potansiyeli, riskler ve fırsatlar özeti.
-**Başarı Olasılığı:** X%
+### 7.3 Uzun Vadeli (12+ Ay)
+En az 5 madde.
 
-**Tavsiye:** Yatırım yapılmalı/Dikkatli olunmalı/Beklenilmeli
-**Kaynaklar:** WTO, ITC Trade Map, UN Comtrade, {request.TargetCountry} Gümrük İdaresi, Türkiye İhracatçılar Meclisi
+## 8. Sonuç
+Kapsamlı değerlendirme, genel tavsiye (İlerle/Dikkatli Ol/Bekle), başarı olasılığı (%), kaynaklar.
 
-**Kaynaklar:** WTO, ITC Trade Map, Eurostat, {request.TargetCountry} Gümrük İdaresi, UN Comtrade
----
+## ChartData
 
-## ChartData (Grafik Verileri)
-## ChartData (Grafik Verileri - JSON)
-
-Aşağıdaki JSON bloğu frontend'de grafik oluşturmak için kullanılacak. Tüm sayıları gerçekçi verilerle doldur:
-Aşağıdaki JSON bloğunu frontend'de grafik çizmek için kullanacağım. TÜM sayısal değerleri gerçekçi rakamlarla doldur (tırnak içinde sayı yazma):
+Aşağıdaki JSON bloğunu birebir bu formatta yaz, 0 değerleri gerçek rakamlarla doldur:
 
 ```json
 {{
-  ""reportInfo"": {{
-    ""hsCode"": ""{request.HsCode}"",
-    ""product"": ""{request.ProductName}"",
-    ""targetCountry"": ""{request.TargetCountry}"",
-    ""originCountry"": ""{request.OriginCountry}""
-    ""originCountry"": ""{request.OriginCountry ?? "Türkiye"}""
-  }},
-  ""marketTrend"": {{
-    ""labels"": [""2023"", ""2024"", ""2025""],
-    ""values"": [sayı1, sayı2, sayı3],
-    ""values"": [0, 0, 0],
-    ""unit"": ""Milyon USD"",
-    ""cagr"": yüzde
-    ""cagr"": 0
-  }},
-  ""marketShare"": {{
-    ""labels"": [""Ülke1"", ""Ülke2"", ""Ülke3"", ""Ülke4"", ""{request.OriginCountry}""],
-    ""values"": [yüzde1, yüzde2, yüzde3, yüzde4, yüzde5],
-    ""labels"": [""Ülke1"", ""Ülke2"", ""Ülke3"", ""{request.OriginCountry ?? "Türkiye"}"", ""Diğer""],
-    ""values"": [0, 0, 0, 0, 0],
-    ""unit"": ""%""
-  }},
-  ""seasonalDemand"": {{
-    ""labels"": [""Oca"", ""Şub"", ""Mar"", ""Nis"", ""May"", ""Haz"", ""Tem"", ""Ağu"", ""Eyl"", ""Eki"", ""Kas"", ""Ara""],
-    ""values"": [ay1, ay2, ay3, ay4, ay5, ay6, ay7, ay8, ay9, ay10, ay11, ay12],
-    ""unit"": ""Talep Endeksi (100 baz)""
-    ""values"": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ""unit"": ""Talep Endeksi""
-  }},
-  ""logistics"": {{
-    ""modes"": [""Karayolu"", ""Denizyolu"", ""Havayolu""],
-    ""durations"": [gün1, gün2, gün3],
-    ""costs"": [maliyet1, maliyet2, maliyet3],
-    ""recommended"": ""En uygun mod""
-    ""modes"": [""Karayolu"", ""Denizyolu"", ""Havayolu"", ""Demiryolu""],
-    ""durations"": [0, 0, 0, 0],
-    ""costs"": [0, 0, 0, 0],
-    ""recommended"": ""mod_adı""
-  }},
-  ""costBreakdown"": {{
-    ""labels"": [""FOB"", ""Navlun"", ""Sigorta"", ""Gümrük"", ""KDV"", ""Diğer""],
-    ""values"": [10000, navlun, sigorta, gümrük, kdv, diğer],
-    ""labels"": [""FOB"", ""Navlun"", ""Sigorta"", ""Gümrük Vergisi"", ""KDV"", ""Diğer""],
-    ""values"": [10000, 0, 0, 0, 0, 0],
-    ""totalLandedCost"": 0,
-    ""unit"": ""USD""
-  }},
-  ""priceSegments"": {{
-    ""labels"": [""Ekonomik"", ""Orta"", ""Premium""],
-    ""minValues"": [min1, min2, min3],
-    ""maxValues"": [max1, max2, max3],
-    ""marketShare"": [pay1, pay2, pay3],
-    ""minValues"": [0, 0, 0],
-    ""maxValues"": [0, 0, 0],
-    ""marketShare"": [0, 0, 0],
-    ""unit"": ""USD""
-  }},
-  ""successMetrics"": {{
-    ""successRate"": yüzde,
-    ""successRate"": 0,
-    ""marketPotential"": ""Yüksek/Orta/Düşük"",
-    ""competitionLevel"": ""Yüksek/Orta/Düşük"",
-    ""entryBarrier"": ""Yüksek/Orta/Düşük""
-    ""entryBarrier"": ""Yüksek/Orta/Düşük"",
-    ""recommendation"": ""İlerle/Dikkatli Ol/Bekle""
-  }}
+  ""marketTrend"": {{""labels"": [""2023"",""2024"",""2025""], ""values"": [0,0,0], ""unit"": ""Milyon USD"", ""cagr"": 0}},
+  ""marketShare"": {{""labels"": [""Ulke1"",""Ulke2"",""Ulke3"",""{origin}"",""Diger""], ""values"": [0,0,0,0,0], ""unit"": ""%""}},
+  ""seasonalDemand"": {{""labels"": [""Oca"",""Sub"",""Mar"",""Nis"",""May"",""Haz"",""Tem"",""Agu"",""Eyl"",""Eki"",""Kas"",""Ara""], ""values"": [0,0,0,0,0,0,0,0,0,0,0,0], ""unit"": ""Talep Endeksi""}},
+  ""costBreakdown"": {{""labels"": [""FOB"",""Navlun"",""Sigorta"",""Gumruk"",""KDV"",""Diger""], ""values"": [10000,0,0,0,0,0], ""totalLandedCost"": 0, ""unit"": ""USD""}},
+  ""successMetrics"": {{""successRate"": 0, ""marketPotential"": ""Yuksek"", ""competitionLevel"": ""Orta"", ""recommendation"": ""Ilerle""}}
 }}
 ```
 
-ÖNEMLİ: JSON'daki tüm ""sayı"", ""yüzde"", ""gün"", ""maliyet"" gibi yer tutucuları gerçekçi rakamlarla değiştir. Tırnak içinde sayı yazma.
-**ÖNEMLİ KURALLAR:**
-1. JSON'daki tüm 0 değerlerini gerçekçi rakamlarla değiştir
-2. Sayıları tırnak içine alma (yanlış: ""100"", doğru: 100)
-3. Yüzdelerin toplamı 100 olmalı (marketShare için)
-4. Mevsimsel talep değerleri 50-150 arasında olmalı (100 = ortalama)
-5. ASCII sanat çizgileri kullanma, sadece Markdown tabloları kullan
+ZORUNLU: JSON'daki tum 0 degerleri gercek rakamlarla degistir. marketShare toplamı 100 olmali. JSON'dan sonra hicbir sey yazma.
 ";
     }
+
 
     private async Task<string?> CallGeminiAsync(string prompt)
     {
@@ -627,10 +362,10 @@ Aşağıdaki JSON bloğunu frontend'de grafik çizmek için kullanacağım. TÜM
             },
             generationConfig = new
             {
-                temperature = 0.7,
+                temperature = 0.4,
                 topK = 40,
-                topP = 0.95,
-                maxOutputTokens = 8192 // Large output for detailed report
+                topP = 0.90,
+                maxOutputTokens = 32768  // 16384 raporu kesiyor, 65536 timeout yapıyor — 32768 denge noktası
             }
         };
 
@@ -642,7 +377,8 @@ Aşağıdaki JSON bloğunu frontend'de grafik çizmek için kullanacağım. TÜM
         {
             try
             {
-                var response = await _httpClient.PostAsync(url, content);
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(3));
+                var response = await _httpClient.PostAsync(url, content, cts.Token);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -918,6 +654,29 @@ Aşağıdaki JSON bloğunu frontend'de grafik çizmek için kullanacağım. TÜM
         {
             _logger.LogError(ex, "❌ Failed to add note for ID: {Id}", analysisId);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Kullanıcının kayıt tarihinden itibaren 30 günlük ücretsiz deneme döneminde olup olmadığını kontrol et
+    /// </summary>
+    public bool IsInFreeTrial(int userId)
+    {
+        try
+        {
+            var user = _dbContext.Users.Find(userId);
+            if (user == null) return false;
+            var daysSinceRegistration = (DateTime.UtcNow - user.CreatedAt).TotalDays;
+            var inTrial = daysSinceRegistration <= 30;
+            _logger.LogInformation(
+                "🎯 FreeTrial kontrol | UserId={Id} | KayıtTarihi={Date} | GünFarkı={Days:F1} | ÜcretsizMi={Free}",
+                userId, user.CreatedAt, daysSinceRegistration, inTrial);
+            return inTrial;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ IsInFreeTrial kontrol hatası | UserId={Id}", userId);
+            return false; // Hata durumunda güvenli taraf: ücretli say
         }
     }
 }
