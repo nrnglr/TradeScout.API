@@ -104,9 +104,11 @@ public class AuthController : ControllerBase
                 Website = registerDto.Website,
                 UserType = registerDto.UserType,
                 Credits = 2,
+                MaxResultsPerSearch = 20, // Free kullanıcılar için varsayılan limit
                 PackageType = "Free",
                 Role = "User",
                 IsActive = true,
+                IsEmailVerified = true, // Email servisi çalışmadığı için otomatik onaylı
                 CreatedAt = DateTime.UtcNow,
                 LastLogin = null
             };
@@ -127,6 +129,7 @@ public class AuthController : ControllerBase
                 Credits = user.Credits,
                 Role = user.Role,
                 PackageType = user.PackageType,
+                MaxResultsPerSearch = user.MaxResultsPerSearch,
                 CreatedAt = user.CreatedAt
             };
 
@@ -200,6 +203,7 @@ public class AuthController : ControllerBase
                 Credits = user.Credits,
                 Role = user.Role,
                 PackageType = user.PackageType,
+                MaxResultsPerSearch = user.MaxResultsPerSearch,
                 CreatedAt = user.CreatedAt
             };
 

@@ -63,7 +63,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("Country");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt");
 
                     b.Property<string>("Email")
@@ -140,7 +140,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("CurrentUses")
                         .HasColumnType("integer");
@@ -153,7 +153,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -177,7 +177,7 @@ namespace TradeScout.API.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -216,7 +216,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("Phone");
 
                     b.Property<DateTime?>("RepliedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("RepliedAt");
 
                     b.Property<string>("Reply")
@@ -256,7 +256,7 @@ namespace TradeScout.API.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -308,7 +308,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("PdfDownloaded");
 
                     b.Property<DateTime?>("PdfDownloadedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("PdfDownloadedAt");
 
                     b.Property<string>("ProductName")
@@ -378,7 +378,7 @@ namespace TradeScout.API.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -432,7 +432,7 @@ namespace TradeScout.API.Migrations
 
                     b.Property<DateTime>("PaymentDate")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("PaymentDate")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -498,7 +498,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("City");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CompletedAt");
 
                     b.Property<string>("Country")
@@ -507,7 +507,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("Country");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt");
 
                     b.Property<int>("CreditsUsed")
@@ -526,7 +526,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("Language");
 
                     b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("StartedAt");
 
                     b.Property<string>("Status")
@@ -581,7 +581,7 @@ namespace TradeScout.API.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("CreatedAt")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -603,7 +603,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("EmailVerificationCode");
 
                     b.Property<DateTime?>("EmailVerificationExpiry")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("EmailVerificationExpiry");
 
                     b.Property<string>("FullName")
@@ -623,7 +623,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("IsEmailVerified");
 
                     b.Property<DateTime?>("LastLogin")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("LastLogin");
 
                     b.Property<int>("MaxResultsPerSearch")
@@ -631,11 +631,11 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("MaxResultsPerSearch");
 
                     b.Property<DateTime?>("MembershipEnd")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("MembershipEnd");
 
                     b.Property<DateTime?>("MembershipStart")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("MembershipStart");
 
                     b.Property<string>("PackageType")
@@ -657,7 +657,7 @@ namespace TradeScout.API.Migrations
                         .HasColumnName("PasswordResetCode");
 
                     b.Property<DateTime?>("PasswordResetExpiry")
-                        .HasColumnType("timestamp with time zone")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("PasswordResetExpiry");
 
                     b.Property<string>("Phone")
