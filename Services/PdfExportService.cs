@@ -23,7 +23,7 @@ public class PdfExportService : IPdfExportService
     public PdfExportService(ILogger<PdfExportService> logger)
     {
         _logger = logger;
-        
+
         // QuestPDF Community lisans ayarı
         QuestPDF.Settings.License = LicenseType.Community;
     }
@@ -43,8 +43,14 @@ public class PdfExportService : IPdfExportService
                 {
                     page.Margin(40);
                     page.Size(PageSizes.A4);
-                    page.DefaultTextStyle(x => x.FontSize(10));
+                    // Arapça içerik tespiti
+                    var isArabic = ContainsArabic(reportContent);
+                    
+                    page.DefaultTextStyle(x => x
+                        .FontSize(10)
+                        .FontFamily("Noto Sans Arabic"));
 
+                    
                     // Header
                     page.Header().Column(headerCol =>
                     {
@@ -56,7 +62,7 @@ public class PdfExportService : IPdfExportService
                                     .FontSize(24)
                                     .Bold()
                                     .FontColor(Colors.Blue.Darken2);
-                                
+
                                 col.Item().Text("Global Ticari İstihbarat Platformu")
                                     .FontSize(10)
                                     .FontColor(Colors.Grey.Darken1);
@@ -67,7 +73,7 @@ public class PdfExportService : IPdfExportService
                                 col.Item().Text(DateTime.Now.ToString("dd MMMM yyyy"))
                                     .FontSize(10)
                                     .FontColor(Colors.Grey.Darken2);
-                                
+
                                 col.Item().Text("Pazar Analiz Raporu")
                                     .FontSize(9)
                                     .FontColor(Colors.Grey.Medium);
@@ -204,7 +210,7 @@ public class PdfExportService : IPdfExportService
                         foreach (var row in section.TableData.Rows)
                         {
                             var bgColor = isAlternate ? Colors.Grey.Lighten4 : Colors.White;
-                            
+
                             foreach (var cell in row)
                             {
                                 table.Cell()
@@ -215,7 +221,7 @@ public class PdfExportService : IPdfExportService
                                     .Text(cell)
                                     .FontSize(9);
                             }
-                            
+
                             isAlternate = !isAlternate;
                         }
                     });
@@ -307,10 +313,10 @@ public class PdfExportService : IPdfExportService
             // H1 başlık
             if (line.StartsWith("# "))
             {
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.H1, 
-                    Text = line.Substring(2).Trim() 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.H1,
+                    Text = line.Substring(2).Trim()
                 });
                 continue;
             }
@@ -318,10 +324,10 @@ public class PdfExportService : IPdfExportService
             // H2 başlık
             if (line.StartsWith("## "))
             {
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.H2, 
-                    Text = line.Substring(3).Trim() 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.H2,
+                    Text = line.Substring(3).Trim()
                 });
                 continue;
             }
@@ -329,10 +335,10 @@ public class PdfExportService : IPdfExportService
             // H3 başlık
             if (line.StartsWith("### "))
             {
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.H3, 
-                    Text = line.Substring(4).Trim() 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.H3,
+                    Text = line.Substring(4).Trim()
                 });
                 continue;
             }
@@ -341,10 +347,10 @@ public class PdfExportService : IPdfExportService
             if (line.StartsWith("**") && line.EndsWith("**"))
             {
                 var boldText = line.Trim('*').Trim();
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.Bold, 
-                    Text = boldText 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.Bold,
+                    Text = boldText
                 });
                 continue;
             }
@@ -355,10 +361,10 @@ public class PdfExportService : IPdfExportService
                 var listText = Regex.Replace(line, @"^[-*]\s+|^\d+\.\s+", "").Trim();
                 // Bold içeren metni temizle
                 listText = Regex.Replace(listText, @"\*\*([^*]+)\*\*", "$1");
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.ListItem, 
-                    Text = listText 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.ListItem,
+                    Text = listText
                 });
                 continue;
             }
@@ -368,10 +374,10 @@ public class PdfExportService : IPdfExportService
             {
                 // Inline bold'u temizle
                 var cleanText = Regex.Replace(line, @"\*\*([^*]+)\*\*", "$1");
-                sections.Add(new ContentSection 
-                { 
-                    Type = ContentType.Paragraph, 
-                    Text = cleanText 
+                sections.Add(new ContentSection
+                {
+                    Type = ContentType.Paragraph,
+                    Text = cleanText
                 });
             }
         }
@@ -401,5 +407,14 @@ public class PdfExportService : IPdfExportService
     {
         public List<string> Headers { get; set; } = new();
         public List<List<string>> Rows { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Metinde Arapça karakter var mı kontrol et
+    /// </summary>
+    private static bool ContainsArabic(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return false;
+        return text.Any(c => c >= '\u0600' && c <= '\u06FF');
     }
 }
