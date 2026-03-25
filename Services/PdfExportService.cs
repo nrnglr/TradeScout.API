@@ -1,13 +1,13 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using QuestPDF.Drawing; 
-using System.IO; 
+using QuestPDF.Drawing;
+using Microsoft.Extensions.Hosting;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace TradeScout.API.Services;
 
-// 🚀 1. INTERFACE TANIMI (Hata almamak için burada durmalı)
 public interface IPdfExportService
 {
     byte[] GenerateAnalysisPdf(string reportContent, string productName, string targetCountry);
@@ -16,18 +16,25 @@ public interface IPdfExportService
 public class PdfExportService : IPdfExportService
 {
     private readonly ILogger<PdfExportService> _logger;
+    private readonly IHostEnvironment _hostEnvironment;
 
-    public PdfExportService(ILogger<PdfExportService> logger)
+    public PdfExportService(ILogger<PdfExportService> logger, IHostEnvironment hostEnvironment)
     {
         _logger = logger;
+        _hostEnvironment = hostEnvironment;
+
         QuestPDF.Settings.License = LicenseType.Community;
 
-        // 🚀 2. DİNAMİK FONT YÜKLEME (Hem Mac hem Linux uyumlu)
+        LoadFonts();
+    }
+
+    private void LoadFonts()
+    {
         try
         {
-            var rootPath = AppDomain.CurrentDomain.BaseDirectory; 
-            var fontPath = Path.Combine(rootPath, "Fonts");
-
+            // ContentRootPath üzerinden Fonts klasörüne erişim
+            var fontPath = Path.Combine(_hostEnvironment.ContentRootPath, "Fonts");
+            
             var regularFont = Path.Combine(fontPath, "Amiri-Regular.ttf");
             var boldFont = Path.Combine(fontPath, "Amiri-Bold.ttf");
 
@@ -35,23 +42,19 @@ public class PdfExportService : IPdfExportService
             {
                 using var stream = File.OpenRead(regularFont);
                 FontManager.RegisterFont(stream);
-                _logger.LogInformation("✅ Amiri Regular fontu yüklendi.");
-            }
-            else 
-            {
-                _logger.LogError("❌ Font dosyası bulunamadı: {Path}", regularFont);
+                _logger.LogInformation("✅ Amiri Regular fontu başarıyla yüklendi.");
             }
 
             if (File.Exists(boldFont))
             {
                 using var stream = File.OpenRead(boldFont);
                 FontManager.RegisterFont(stream);
-                _logger.LogInformation("✅ Amiri Bold fontu yüklendi.");
+                _logger.LogInformation("✅ Amiri Bold fontu başarıyla yüklendi.");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "⚠️ Fontlar yüklenirken hata oluştu.");
+            _logger.LogError(ex, "⚠️ Fontlar yüklenirken hata oluştu!");
         }
     }
 
@@ -63,23 +66,22 @@ public class PdfExportService : IPdfExportService
         {
             var isArabic = ContainsArabic(reportContent);
 
-            var pdfBytes = Document.Create(container =>
+            return Document.Create(container =>
             {
                 container.Page(page =>
                 {
                     page.Margin(40);
                     page.Size(PageSizes.A4);
-                    
-                    // 🚀 3. VARSAYILAN FONT AYARI (Linux'ta Arial olmadığı için Amiri'yi her durumda kullanıyoruz)
+
+                    // 🚀 CS1061 HATASI ÇÖZÜMÜ: 
+                    // Amiri fontu zaten Latin ve Arapça karakterleri bir arada destekler. 
+                    // Fallback metodunu kullanmak yerine direkt FontFamily set etmek yeterlidir.
                     page.DefaultTextStyle(x => x
                         .FontSize(10)
-                        .FontFamily("Amiri") 
-                        .Fallback(f => f.FontFamily("Amiri")));
+                        .FontFamily("Amiri"));
 
                     if (isArabic)
-                    {
                         page.ContentFromRightToLeft();
-                    }
 
                     // Header
                     page.Header().Column(headerCol =>
@@ -88,18 +90,10 @@ public class PdfExportService : IPdfExportService
                         {
                             row.RelativeItem().Column(col =>
                             {
-                                col.Item().Text("FGS TRADE")
-                                    .FontSize(24)
-                                    .Bold()
-                                    .FontColor(Colors.Blue.Darken2);
-
-                                col.Item().Text("Global Ticari İstihbarat Platformu")
-                                    .FontSize(10)
-                                    .FontColor(Colors.Grey.Darken1);
+                                col.Item().Text("FGS TRADE").FontSize(24).Bold().FontColor(Colors.Blue.Darken2);
+                                col.Item().Text("Global Ticari İstihbarat Platformu").FontSize(10).FontColor(Colors.Grey.Darken1);
                             });
-
-                            row.ConstantItem(120).AlignRight().Text(DateTime.Now.ToString("dd MMMM yyyy"))
-                                .FontSize(10);
+                            row.ConstantItem(120).AlignRight().Text(DateTime.Now.ToString("dd MMMM yyyy")).FontSize(10);
                         });
                         headerCol.Item().PaddingTop(10).LineHorizontal(1).LineColor(Colors.Blue.Darken2);
                     });
@@ -108,9 +102,7 @@ public class PdfExportService : IPdfExportService
                     page.Content().PaddingVertical(15).Column(col =>
                     {
                         col.Item().PaddingBottom(10).Text($"{productName} - {targetCountry} Pazar Analizi")
-                            .FontSize(18)
-                            .Bold()
-                            .FontColor(Colors.Blue.Darken3);
+                            .FontSize(18).Bold().FontColor(Colors.Blue.Darken3);
 
                         var sections = ParseMarkdownContent(reportContent);
                         foreach (var section in sections)
@@ -127,12 +119,10 @@ public class PdfExportService : IPdfExportService
                     });
                 });
             }).GeneratePdf();
-
-            return pdfBytes;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ PDF oluşturma sırasında hata!");
+            _logger.LogError(ex, "❌ PDF oluşturma hatası!");
             throw;
         }
     }
@@ -176,6 +166,7 @@ public class PdfExportService : IPdfExportService
         }
     }
 
+    // 🚀 CS0161 HATASI ÇÖZÜMÜ: Metodun sonuna 'return sections' eklendi.
     private List<ContentSection> ParseMarkdownContent(string markdown)
     {
         var sections = new List<ContentSection>();
@@ -196,20 +187,25 @@ public class PdfExportService : IPdfExportService
                 else { tableData.Rows.Add(cells); }
                 continue;
             }
-            else if (inTable) { sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData }); inTable = false; tableData = new TableData(); }
+            else if (inTable) 
+            { 
+                sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData }); 
+                inTable = false; 
+                tableData = new TableData(); 
+            }
 
-            if (line.StartsWith("# ")) sections.Add(new ContentSection { Type = ContentType.H1, Text = line.Substring(2) });
-            else if (line.StartsWith("## ")) sections.Add(new ContentSection { Type = ContentType.H2, Text = line.Substring(3) });
-            else if (line.StartsWith("- ") || line.StartsWith("* ")) sections.Add(new ContentSection { Type = ContentType.ListItem, Text = line.Substring(2) });
+            if (line.StartsWith("# ")) sections.Add(new ContentSection { Type = ContentType.H1, Text = line.Substring(2).Trim() });
+            else if (line.StartsWith("## ")) sections.Add(new ContentSection { Type = ContentType.H2, Text = line.Substring(3).Trim() });
+            else if (line.StartsWith("- ") || line.StartsWith("* ")) sections.Add(new ContentSection { Type = ContentType.ListItem, Text = Regex.Replace(line, @"^[-*]\s+", "").Trim() });
             else sections.Add(new ContentSection { Type = ContentType.Paragraph, Text = line });
         }
         if (inTable) sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData });
-        return sections;
+        
+        return sections; // 👈 Buradaki return ifadesi hatayı çözer.
     }
 
     private enum ContentType { H1, H2, Bold, Paragraph, ListItem, Table }
     private class ContentSection { public ContentType Type { get; set; } public string Text { get; set; } = ""; public TableData? TableData { get; set; } }
     private class TableData { public List<string> Headers { get; set; } = new(); public List<List<string>> Rows { get; set; } = new(); }
-
     private static bool ContainsArabic(string text) => !string.IsNullOrEmpty(text) && text.Any(c => c >= '\u0600' && c <= '\u06FF');
 }
