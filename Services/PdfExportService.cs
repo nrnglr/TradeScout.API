@@ -44,13 +44,21 @@ public class PdfExportService : IPdfExportService
                     page.Margin(40);
                     page.Size(PageSizes.A4);
                     // Arapça içerik tespiti
+                    // Arapça içerik tespiti
                     var isArabic = ContainsArabic(reportContent);
-                    
+
                     page.DefaultTextStyle(x => x
                         .FontSize(10)
-                        .FontFamily("Noto Sans Arabic"));
+                        .FontFamily("Noto Sans Arabic")
+                        .Fallback(f => f.FontFamily("Arial"))); // Font bulamazsa Arial denesin
 
-                    
+                    // EĞER ARAPÇA İSE SAYFA DÜZENİNİ SAĞDAN SOLA (RTL) ÇEVİR
+                    if (isArabic)
+                    {
+                        page.ContentFromRightToLeft();
+                    }
+
+
                     // Header
                     page.Header().Column(headerCol =>
                     {

@@ -69,7 +69,7 @@ public class TradeIntelligenceController : ControllerBase
             var ipAddress = GetClientIpAddress();
             var userAgent = Request.Headers["User-Agent"].ToString();
 
-            // Kredi kontrolü (her pazar analizi 5 kredi)
+            // Kredi kontrolü (her pazar analizi 5 kredi) - Admin kullanıcılar hariç
             var requiredCredits = 5;
             if (userId.HasValue)
             {
@@ -77,21 +77,29 @@ public class TradeIntelligenceController : ControllerBase
                 if (user == null)
                     return Unauthorized(new { message = "Kullanıcı bulunamadı." });
 
-                if (user.Credits < requiredCredits)
+                // Admin kontrolü - Admin kullanıcılar kredi harcamaz
+                if (user.Role != "Admin")
                 {
-                    return StatusCode(402, new
+                    if (user.Credits < requiredCredits)
                     {
-                        message = $"Yetersiz kredi. Pazar analizi için {requiredCredits} kredi gereklidir. Mevcut: {user.Credits}",
-                        requiredCredits,
-                        availableCredits = user.Credits
-                    });
-                }
+                        return StatusCode(402, new
+                        {
+                            message = $"Yetersiz kredi. Pazar analizi için {requiredCredits} kredi gereklidir. Mevcut: {user.Credits}",
+                            requiredCredits,
+                            availableCredits = user.Credits
+                        });
+                    }
 
-                // Krediyi düş
-                user.Credits -= requiredCredits;
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("💳 Pazar analizi kredisi düşüldü | UserId={UserId} | Kullanılan={Used} | Kalan={Left}",
-                    userId, requiredCredits, user.Credits);
+                    // Krediyi düş
+                    user.Credits -= requiredCredits;
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("💳 Pazar analizi kredisi düşüldü | UserId={UserId} | Kullanılan={Used} | Kalan={Left}",
+                        userId, requiredCredits, user.Credits);
+                }
+                else
+                {
+                    _logger.LogInformation("👑 Admin kullanıcı - kredi kontrolü bypass edildi | UserId={UserId}", userId);
+                }
             }
 
             _logger.LogInformation("📊 Trade Intelligence Report request: HS={HsCode}, Product={Product}, Target={Target}, Origin={Origin}, UserId={UserId}",
