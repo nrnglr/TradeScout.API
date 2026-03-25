@@ -29,37 +29,35 @@ public class PdfExportService : IPdfExportService
 {
     try
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        
-        // 🚀 Resource isimleri genellikle [Namespace].[Klasör].[Dosya] şeklindedir
-        string regPath = "TradeScout.API.Fonts.Amiri-Regular.ttf";
-        string boldPath = "TradeScout.API.Fonts.Amiri-Bold.ttf";
+        // 🚀 fc-list çıktındaki kesin yolları kullanıyoruz
+        string regPath = "/usr/share/fonts/Amiri-Regular.ttf";
+        string boldPath = "/usr/share/fonts/opentype/fonts-hosny-amiri/Amiri-Bold.ttf";
 
-        using var regularStream = assembly.GetManifestResourceStream(regPath);
-        using var boldStream = assembly.GetManifestResourceStream(boldPath);
-
-        if (regularStream != null)
+        // Regular Font Kontrol ve Yükleme
+        if (File.Exists(regPath))
         {
-            FontManager.RegisterFont(regularStream);
-            _logger.LogInformation("✅ Amiri Regular EMBEDDED olarak yüklendi.");
+            using var stream = File.OpenRead(regPath);
+            FontManager.RegisterFont(stream);
+            _logger.LogInformation("✅ Amiri Regular (Sistem Yolu) başarıyla yüklendi.");
         }
         else
         {
-            _logger.LogError("❌ HATA: {Path} bulunamadı! Namespace veya klasör adını kontrol et.", regPath);
+            _logger.LogError("❌ HATA: Regular font şu yolda bulunamadı: {Path}", regPath);
         }
 
-        if (boldStream != null)
+        // Bold Font Kontrol ve Yükleme
+        if (File.Exists(boldPath))
         {
-            FontManager.RegisterFont(boldStream);
-            _logger.LogInformation("✅ Amiri Bold EMBEDDED olarak yüklendi.");
+            using var stream = File.OpenRead(boldPath);
+            FontManager.RegisterFont(stream);
+            _logger.LogInformation("✅ Amiri Bold (Sistem Yolu) başarıyla yüklendi.");
         }
     }
     catch (Exception ex)
     {
-        _logger.LogError(ex, "⚠️ Embedded font yükleme hatası!");
+        _logger.LogError(ex, "⚠️ Font yükleme işlemi sırasında teknik bir hata oluştu!");
     }
 }
-
     public byte[] GenerateAnalysisPdf(string reportContent, string productName, string targetCountry)
     {
         _logger.LogInformation("📄 PDF oluşturuluyor: {Product} - {Country}", productName, targetCountry);
