@@ -1,23 +1,17 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using QuestPDF.Drawing; // FontManager için gerekli
-using System.IO; // File sınıfı için gerekli
+using QuestPDF.Drawing; // FontManager için şart
+using System.IO; // File okuma için şart
 using System.Text.RegularExpressions;
 
 namespace TradeScout.API.Services;
 
-/// <summary>
-/// PDF Export Service Interface
-/// </summary>
 public interface IPdfExportService
 {
     byte[] GenerateAnalysisPdf(string reportContent, string productName, string targetCountry);
 }
 
-/// <summary>
-/// PDF Export Service - QuestPDF ile profesyonel PDF oluşturma
-/// </summary>
 public class PdfExportService : IPdfExportService
 {
     private readonly ILogger<PdfExportService> _logger;
@@ -25,34 +19,33 @@ public class PdfExportService : IPdfExportService
     public PdfExportService(ILogger<PdfExportService> logger)
     {
         _logger = logger;
-
-        // QuestPDF Community lisans ayarı
         QuestPDF.Settings.License = LicenseType.Community;
 
-        // 🚀 LINUX İNADINI KIRAN KISIM: Fontu zorla sisteme enjekte ediyoruz
+        // 🚀 HER İKİ FONTU DA (REGULAR VE BOLD) SİSTEME ZORLA ENJEKTE EDİYORUZ
         try
         {
-            var fontPath = "/home/fgstrade.com/app/backend/Amiri-Regular.ttf";
-            if (File.Exists(fontPath))
+            var regularFont = "/home/fgstrade.com/app/backend/Amiri-Regular.ttf";
+            if (File.Exists(regularFont))
             {
-                using var fontStream = File.OpenRead(fontPath);
-                FontManager.RegisterFont(fontStream);
-                _logger.LogInformation("✅ Amiri fontu başarıyla yüklendi.");
+                using var stream = File.OpenRead(regularFont);
+                FontManager.RegisterFont(stream);
             }
-            else
+
+            var boldFont = "/home/fgstrade.com/app/backend/Amiri-Bold.ttf";
+            if (File.Exists(boldFont))
             {
-                _logger.LogWarning("⚠️ Amiri font dosyası bulunamadı, PDF'te hatalar olabilir: {FontPath}", fontPath);
+                using var stream = File.OpenRead(boldFont);
+                FontManager.RegisterFont(stream);
             }
+            
+            _logger.LogInformation("✅ Amiri Regular ve Bold fontları başarıyla yüklendi.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "⚠️ Amiri fontu yüklenirken hata oluştu.");
+            _logger.LogWarning(ex, "⚠️ Amiri fontları yüklenirken hata oluştu.");
         }
     }
 
-    /// <summary>
-    /// Markdown içeriğinden PDF oluştur
-    /// </summary>
     public byte[] GenerateAnalysisPdf(string reportContent, string productName, string targetCountry)
     {
         _logger.LogInformation("📄 PDF oluşturuluyor: {Product} - {Country}", productName, targetCountry);
@@ -66,19 +59,17 @@ public class PdfExportService : IPdfExportService
                     page.Margin(40);
                     page.Size(PageSizes.A4);
                     
-                    // Arapça içerik tespiti
                     var isArabic = ContainsArabic(reportContent);
 
-                    // 🚀 FONT VE YÖN AYARI
+                    // 🚀 FONT VE YÖN AYARI (Arapça ise Amiri, değilse Arial)
                     page.DefaultTextStyle(x => x
                         .FontSize(10)
                         .FontFamily(isArabic ? "Amiri" : "Arial")
-                        .Fallback(f => f.FontFamily("Arial"))); // Font bulamazsa Arial denesin
+                        .Fallback(f => f.FontFamily("Arial")));
 
-                    // 🚀 EĞER ARAPÇA İSE SAYFA DÜZENİNİ SAĞDAN SOLA (RTL) ÇEVİR
                     if (isArabic)
                     {
-                        page.ContentFromRightToLeft();
+                        page.ContentFromRightToLeft(); // Sağdan sola yazım kuralı
                     }
 
                     // Header
@@ -116,20 +107,16 @@ public class PdfExportService : IPdfExportService
                     // Content
                     page.Content().PaddingVertical(15).Column(col =>
                     {
-                        // Rapor Başlığı
                         col.Item().PaddingBottom(10).Text($"{productName} - {targetCountry} Pazar Analizi")
                             .FontSize(18)
                             .Bold()
                             .FontColor(Colors.Blue.Darken3);
 
-                        // Markdown içeriğini parse et ve PDF'e dönüştür
                         var sections = ParseMarkdownContent(reportContent);
-
                         foreach (var section in sections)
                         {
                             RenderSection(col, section);
                         }
-
                     });
 
                     // Footer
@@ -173,103 +160,47 @@ public class PdfExportService : IPdfExportService
         switch (section.Type)
         {
             case ContentType.H1:
-                col.Item().PaddingTop(15).PaddingBottom(5)
-                    .Text(section.Text)
-                    .FontSize(16)
-                    .Bold()
-                    .FontColor(Colors.Blue.Darken2);
+                col.Item().PaddingTop(15).PaddingBottom(5).Text(section.Text).FontSize(16).Bold().FontColor(Colors.Blue.Darken2);
                 break;
-
             case ContentType.H2:
-                col.Item().PaddingTop(12).PaddingBottom(4)
-                    .Text(section.Text)
-                    .FontSize(14)
-                    .SemiBold()
-                    .FontColor(Colors.Blue.Darken1);
+                col.Item().PaddingTop(12).PaddingBottom(4).Text(section.Text).FontSize(14).SemiBold().FontColor(Colors.Blue.Darken1);
                 break;
-
             case ContentType.H3:
-                col.Item().PaddingTop(8).PaddingBottom(3)
-                    .Text(section.Text)
-                    .FontSize(12)
-                    .SemiBold()
-                    .FontColor(Colors.Grey.Darken3);
+                col.Item().PaddingTop(8).PaddingBottom(3).Text(section.Text).FontSize(12).SemiBold().FontColor(Colors.Grey.Darken3);
                 break;
-
             case ContentType.Bold:
-                col.Item().PaddingVertical(2)
-                    .Text(section.Text)
-                    .FontSize(10)
-                    .Bold();
+                col.Item().PaddingVertical(2).Text(section.Text).FontSize(10).Bold();
                 break;
-
             case ContentType.ListItem:
-                col.Item().PaddingLeft(15).PaddingVertical(1)
-                    .Text($"• {section.Text}")
-                    .FontSize(10);
+                col.Item().PaddingLeft(15).PaddingVertical(1).Text($"• {section.Text}").FontSize(10);
                 break;
-
             case ContentType.Table:
                 if (section.TableData != null && section.TableData.Headers.Count > 0)
                 {
                     col.Item().PaddingVertical(5).Table(table =>
                     {
-                        // Sütun tanımları
-                        table.ColumnsDefinition(columns =>
-                        {
-                            foreach (var _ in section.TableData.Headers)
-                            {
-                                columns.RelativeColumn();
-                            }
-                        });
-
-                        // Header row
+                        table.ColumnsDefinition(columns => { foreach (var _ in section.TableData.Headers) columns.RelativeColumn(); });
                         foreach (var header in section.TableData.Headers)
                         {
-                            table.Cell()
-                                .Background(Colors.Blue.Darken2)
-                                .Padding(5)
-                                .Text(header)
-                                .FontSize(9)
-                                .Bold()
-                                .FontColor(Colors.White);
+                            table.Cell().Background(Colors.Blue.Darken2).Padding(5).Text(header).FontSize(9).Bold().FontColor(Colors.White);
                         }
-
-                        // Data rows
                         var isAlternate = false;
                         foreach (var row in section.TableData.Rows)
                         {
                             var bgColor = isAlternate ? Colors.Grey.Lighten4 : Colors.White;
-
                             foreach (var cell in row)
                             {
-                                table.Cell()
-                                    .Background(bgColor)
-                                    .BorderBottom(0.5f)
-                                    .BorderColor(Colors.Grey.Lighten2)
-                                    .Padding(4)
-                                    .Text(cell)
-                                    .FontSize(9);
+                                table.Cell().Background(bgColor).BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Padding(4).Text(cell).FontSize(9);
                             }
-
                             isAlternate = !isAlternate;
                         }
                     });
                 }
                 break;
-
             case ContentType.Paragraph:
-                if (!string.IsNullOrWhiteSpace(section.Text))
-                {
-                    col.Item().PaddingVertical(3)
-                        .Text(section.Text)
-                        .FontSize(10)
-                        .LineHeight(1.4f);
-                }
+                if (!string.IsNullOrWhiteSpace(section.Text)) col.Item().PaddingVertical(3).Text(section.Text).FontSize(10).LineHeight(1.4f);
                 break;
-
             case ContentType.JsonBlock:
-                // JSON bloğunu atla (PDF'de gösterme)
                 break;
         }
     }
@@ -285,163 +216,56 @@ public class PdfExportService : IPdfExportService
         foreach (var rawLine in lines)
         {
             var line = rawLine.Trim();
-
-            // JSON block başlangıcı/bitişi
             if (line.StartsWith("```json") || (line == "```" && inJsonBlock))
             {
                 inJsonBlock = line.StartsWith("```json");
-                if (!inJsonBlock && inJsonBlock)
-                {
-                    sections.Add(new ContentSection { Type = ContentType.JsonBlock });
-                }
+                if (!inJsonBlock && inJsonBlock) sections.Add(new ContentSection { Type = ContentType.JsonBlock });
                 continue;
             }
+            if (inJsonBlock) continue;
+            if (line.StartsWith("```")) continue;
 
-            if (inJsonBlock)
-            {
-                continue; // JSON içeriğini atla
-            }
-
-            // Code block atla
-            if (line.StartsWith("```"))
-            {
-                continue;
-            }
-
-            // Tablo satırı
             if (line.StartsWith("|") && line.EndsWith("|"))
             {
-                // Ayırıcı satırı atla
-                if (line.Contains("---") || line.Contains(":-"))
-                {
-                    continue;
-                }
-
-                var cells = line.Split('|', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(c => c.Trim())
-                    .ToArray();
-
-                if (!inTable)
-                {
-                    inTable = true;
-                    tableData = new TableData { Headers = cells.ToList() };
-                }
-                else
-                {
-                    tableData.Rows.Add(cells.ToList());
-                }
+                if (line.Contains("---") || line.Contains(":-")) continue;
+                var cells = line.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(c => c.Trim()).ToArray();
+                if (!inTable) { inTable = true; tableData = new TableData { Headers = cells.ToList() }; }
+                else { tableData.Rows.Add(cells.ToList()); }
                 continue;
             }
             else if (inTable)
             {
-                // Tablo bitti
                 sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData });
                 inTable = false;
                 tableData = new TableData();
             }
 
-            // H1 başlık
-            if (line.StartsWith("# "))
-            {
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.H1,
-                    Text = line.Substring(2).Trim()
-                });
-                continue;
-            }
-
-            // H2 başlık
-            if (line.StartsWith("## "))
-            {
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.H2,
-                    Text = line.Substring(3).Trim()
-                });
-                continue;
-            }
-
-            // H3 başlık
-            if (line.StartsWith("### "))
-            {
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.H3,
-                    Text = line.Substring(4).Trim()
-                });
-                continue;
-            }
-
-            // Bold satır (başlık gibi)
-            if (line.StartsWith("**") && line.EndsWith("**"))
-            {
-                var boldText = line.Trim('*').Trim();
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.Bold,
-                    Text = boldText
-                });
-                continue;
-            }
-
-            // Liste öğesi
+            if (line.StartsWith("# ")) { sections.Add(new ContentSection { Type = ContentType.H1, Text = line.Substring(2).Trim() }); continue; }
+            if (line.StartsWith("## ")) { sections.Add(new ContentSection { Type = ContentType.H2, Text = line.Substring(3).Trim() }); continue; }
+            if (line.StartsWith("### ")) { sections.Add(new ContentSection { Type = ContentType.H3, Text = line.Substring(4).Trim() }); continue; }
+            if (line.StartsWith("**") && line.EndsWith("**")) { sections.Add(new ContentSection { Type = ContentType.Bold, Text = line.Trim('*').Trim() }); continue; }
             if (line.StartsWith("- ") || line.StartsWith("* ") || Regex.IsMatch(line, @"^\d+\.\s"))
             {
                 var listText = Regex.Replace(line, @"^[-*]\s+|^\d+\.\s+", "").Trim();
-                // Bold içeren metni temizle
                 listText = Regex.Replace(listText, @"\*\*([^*]+)\*\*", "$1");
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.ListItem,
-                    Text = listText
-                });
+                sections.Add(new ContentSection { Type = ContentType.ListItem, Text = listText });
                 continue;
             }
 
-            // Normal paragraf
             if (!string.IsNullOrWhiteSpace(line))
             {
-                // Inline bold'u temizle
                 var cleanText = Regex.Replace(line, @"\*\*([^*]+)\*\*", "$1");
-                sections.Add(new ContentSection
-                {
-                    Type = ContentType.Paragraph,
-                    Text = cleanText
-                });
+                sections.Add(new ContentSection { Type = ContentType.Paragraph, Text = cleanText });
             }
         }
-
-        // Son tablo varsa ekle
-        if (inTable && tableData.Headers.Count > 0)
-        {
-            sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData });
-        }
-
+        if (inTable && tableData.Headers.Count > 0) sections.Add(new ContentSection { Type = ContentType.Table, TableData = tableData });
         return sections;
     }
 
-    private enum ContentType
-    {
-        H1, H2, H3, Bold, Paragraph, ListItem, Table, JsonBlock
-    }
+    private enum ContentType { H1, H2, H3, Bold, Paragraph, ListItem, Table, JsonBlock }
+    private class ContentSection { public ContentType Type { get; set; } public string Text { get; set; } = ""; public TableData? TableData { get; set; } }
+    private class TableData { public List<string> Headers { get; set; } = new(); public List<List<string>> Rows { get; set; } = new(); }
 
-    private class ContentSection
-    {
-        public ContentType Type { get; set; }
-        public string Text { get; set; } = "";
-        public TableData? TableData { get; set; }
-    }
-
-    private class TableData
-    {
-        public List<string> Headers { get; set; } = new();
-        public List<List<string>> Rows { get; set; } = new();
-    }
-
-    /// <summary>
-    /// Metinde Arapça karakter var mı kontrol et
-    /// </summary>
     private static bool ContainsArabic(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;

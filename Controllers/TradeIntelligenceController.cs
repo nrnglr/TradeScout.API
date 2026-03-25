@@ -78,7 +78,17 @@ public class TradeIntelligenceController : ControllerBase
                     return Unauthorized(new { message = "Kullanıcı bulunamadı." });
 
                 // Admin kontrolü - Admin kullanıcılar kredi harcamaz
-                if (user.Role != "Admin")
+                if (user.Role == "Admin")
+                {
+                    _logger.LogInformation("👑 Admin kullanıcı - kredi kontrolü bypass edildi | UserId={UserId}", userId);
+                }
+                // Free Trial kontrolü - İlk 30 gün ücretsiz
+                else if (_tradeIntelligenceService.IsInFreeTrial(userId.Value))
+                {
+                    _logger.LogInformation("🎁 Free Trial kullanıcı - kredi kontrolü bypass edildi | UserId={UserId}", userId);
+                }
+                // Normal kullanıcılar için kredi kontrolü
+                else
                 {
                     if (user.Credits < requiredCredits)
                     {
@@ -95,10 +105,6 @@ public class TradeIntelligenceController : ControllerBase
                     await _context.SaveChangesAsync();
                     _logger.LogInformation("💳 Pazar analizi kredisi düşüldü | UserId={UserId} | Kullanılan={Used} | Kalan={Left}",
                         userId, requiredCredits, user.Credits);
-                }
-                else
-                {
-                    _logger.LogInformation("👑 Admin kullanıcı - kredi kontrolü bypass edildi | UserId={UserId}", userId);
                 }
             }
 
