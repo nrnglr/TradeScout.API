@@ -1,6 +1,8 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using QuestPDF.Drawing; // FontManager için gerekli
+using System.IO; // File sınıfı için gerekli
 using System.Text.RegularExpressions;
 
 namespace TradeScout.API.Services;
@@ -26,6 +28,26 @@ public class PdfExportService : IPdfExportService
 
         // QuestPDF Community lisans ayarı
         QuestPDF.Settings.License = LicenseType.Community;
+
+        // 🚀 LINUX İNADINI KIRAN KISIM: Fontu zorla sisteme enjekte ediyoruz
+        try
+        {
+            var fontPath = "/home/fgstrade.com/app/backend/Amiri-Regular.ttf";
+            if (File.Exists(fontPath))
+            {
+                using var fontStream = File.OpenRead(fontPath);
+                FontManager.RegisterFont(fontStream);
+                _logger.LogInformation("✅ Amiri fontu başarıyla yüklendi.");
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ Amiri font dosyası bulunamadı, PDF'te hatalar olabilir: {FontPath}", fontPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ Amiri fontu yüklenirken hata oluştu.");
+        }
     }
 
     /// <summary>
@@ -43,21 +65,21 @@ public class PdfExportService : IPdfExportService
                 {
                     page.Margin(40);
                     page.Size(PageSizes.A4);
-                    // Arapça içerik tespiti
+                    
                     // Arapça içerik tespiti
                     var isArabic = ContainsArabic(reportContent);
 
+                    // 🚀 FONT VE YÖN AYARI
                     page.DefaultTextStyle(x => x
                         .FontSize(10)
-                        .FontFamily("Noto Sans Arabic")
+                        .FontFamily(isArabic ? "Amiri" : "Arial")
                         .Fallback(f => f.FontFamily("Arial"))); // Font bulamazsa Arial denesin
 
-                    // EĞER ARAPÇA İSE SAYFA DÜZENİNİ SAĞDAN SOLA (RTL) ÇEVİR
+                    // 🚀 EĞER ARAPÇA İSE SAYFA DÜZENİNİ SAĞDAN SOLA (RTL) ÇEVİR
                     if (isArabic)
                     {
                         page.ContentFromRightToLeft();
                     }
-
 
                     // Header
                     page.Header().Column(headerCol =>
