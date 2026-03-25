@@ -26,6 +26,11 @@
     <PackageReference Include="Selenium.WebDriver" Version="4.40.0" />
     <PackageReference Include="Selenium.WebDriver.ChromeDriver" Version="144.0.7559.13300" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
+    <ItemGroup>
+  <None Update="Fonts\*.ttf">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
   </ItemGroup>
 
 </Project>
