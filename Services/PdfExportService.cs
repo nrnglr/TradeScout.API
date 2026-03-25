@@ -1,8 +1,8 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
-using QuestPDF.Drawing; // FontManager için şart
-using System.IO; // File okuma için şart
+using QuestPDF.Drawing; 
+using System.IO; 
 using System.Text.RegularExpressions;
 
 namespace TradeScout.API.Services;
@@ -21,28 +21,40 @@ public class PdfExportService : IPdfExportService
         _logger = logger;
         QuestPDF.Settings.License = LicenseType.Community;
 
-        // 🚀 HER İKİ FONTU DA (REGULAR VE BOLD) SİSTEME ZORLA ENJEKTE EDİYORUZ
+        // 🚀 DİNAMİK FONT YÜKLEME (Local ve Sunucu Uyumlu)
         try
         {
-            var regularFont = "/home/fgstrade.com/app/backend/Amiri-Regular.ttf";
-            if (File.Exists(regularFont))
+            var rootPath = AppDomain.CurrentDomain.BaseDirectory; 
+            
+            // Regular Font Yükleme
+            var regularFontPath = Path.Combine(rootPath, "Fonts", "Amiri-Regular.ttf");
+            if (File.Exists(regularFontPath))
             {
-                using var stream = File.OpenRead(regularFont);
+                using var stream = File.OpenRead(regularFontPath);
                 FontManager.RegisterFont(stream);
+                _logger.LogInformation("✅ Amiri Regular fontu başarıyla yüklendi: {Path}", regularFontPath);
+            }
+            else
+            {
+                _logger.LogError("❌ Amiri Regular fontu bulunamadı: {Path}", regularFontPath);
             }
 
-            var boldFont = "/home/fgstrade.com/app/backend/Amiri-Bold.ttf";
-            if (File.Exists(boldFont))
+            // Bold Font Yükleme
+            var boldFontPath = Path.Combine(rootPath, "Fonts", "Amiri-Bold.ttf");
+            if (File.Exists(boldFontPath))
             {
-                using var stream = File.OpenRead(boldFont);
+                using var stream = File.OpenRead(boldFontPath);
                 FontManager.RegisterFont(stream);
+                _logger.LogInformation("✅ Amiri Bold fontu başarıyla yüklendi: {Path}", boldFontPath);
             }
-            
-            _logger.LogInformation("✅ Amiri Regular ve Bold fontları başarıyla yüklendi.");
+            else
+            {
+                _logger.LogError("❌ Amiri Bold fontu bulunamadı: {Path}", boldFontPath);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "⚠️ Amiri fontları yüklenirken hata oluştu.");
+            _logger.LogWarning(ex, "⚠️ Fontlar yüklenirken beklenmedik bir hata oluştu.");
         }
     }
 
@@ -59,9 +71,9 @@ public class PdfExportService : IPdfExportService
                     page.Margin(40);
                     page.Size(PageSizes.A4);
                     
-                    var isArabic = ContainsArabic(reportContent);
+                    var isArabic = ContainsArabic(reportContent); //
 
-                    // 🚀 FONT VE YÖN AYARI (Arapça ise Amiri, değilse Arial)
+                    // FONT VE YÖN AYARI
                     page.DefaultTextStyle(x => x
                         .FontSize(10)
                         .FontFamily(isArabic ? "Amiri" : "Arial")
@@ -69,7 +81,7 @@ public class PdfExportService : IPdfExportService
 
                     if (isArabic)
                     {
-                        page.ContentFromRightToLeft(); // Sağdan sola yazım kuralı
+                        page.ContentFromRightToLeft(); //
                     }
 
                     // Header
@@ -112,7 +124,7 @@ public class PdfExportService : IPdfExportService
                             .Bold()
                             .FontColor(Colors.Blue.Darken3);
 
-                        var sections = ParseMarkdownContent(reportContent);
+                        var sections = ParseMarkdownContent(reportContent); //
                         foreach (var section in sections)
                         {
                             RenderSection(col, section);
@@ -157,7 +169,7 @@ public class PdfExportService : IPdfExportService
 
     private void RenderSection(ColumnDescriptor col, ContentSection section)
     {
-        switch (section.Type)
+        switch (section.Type) //
         {
             case ContentType.H1:
                 col.Item().PaddingTop(15).PaddingBottom(5).Text(section.Text).FontSize(16).Bold().FontColor(Colors.Blue.Darken2);
@@ -207,7 +219,7 @@ public class PdfExportService : IPdfExportService
 
     private List<ContentSection> ParseMarkdownContent(string markdown)
     {
-        var sections = new List<ContentSection>();
+        var sections = new List<ContentSection>(); //
         var lines = markdown.Split('\n');
         var inJsonBlock = false;
         var inTable = false;
@@ -219,11 +231,9 @@ public class PdfExportService : IPdfExportService
             if (line.StartsWith("```json") || (line == "```" && inJsonBlock))
             {
                 inJsonBlock = line.StartsWith("```json");
-                if (!inJsonBlock && inJsonBlock) sections.Add(new ContentSection { Type = ContentType.JsonBlock });
                 continue;
             }
             if (inJsonBlock) continue;
-            if (line.StartsWith("```")) continue;
 
             if (line.StartsWith("|") && line.EndsWith("|"))
             {
