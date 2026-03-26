@@ -616,7 +616,7 @@ ZORUNLU: JSON'daki tum 0 degerleri gercek rakamlarla degistir. marketShare topla
             analysis.IsFavorite = !analysis.IsFavorite;
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("✅ Favorite toggled for analysis ID: {Id}, IsFavorite: {IsFavorite}", 
+            _logger.LogInformation("✅ Favorite toggled for analysis ID: {Id}, IsFavorite: {IsFavorite}",
                 analysisId, analysis.IsFavorite);
 
             return analysis.IsFavorite;
@@ -666,11 +666,22 @@ ZORUNLU: JSON'daki tum 0 degerleri gercek rakamlarla degistir. marketShare topla
         {
             var user = _dbContext.Users.Find(userId);
             if (user == null) return false;
+
+            // 🚀 HATA BURADAYDI: Eğer kayıt olurken tarih atanmadıysa 0001-01-01 olur.
+            // Bu durumda aradaki fark 738 bin gün çıkıyordu. Bunu yakalayıp düzeltiyoruz:
+            if (user.CreatedAt.Year < 2020)
+            {
+                _logger.LogInformation("⚠️ Kullanıcının CreatedAt değeri atanmamış (0001 yılı). Yeni kayıt sayılarak Free Trial onaylandı.");
+                return true;
+            }
+
             var daysSinceRegistration = (DateTime.UtcNow - user.CreatedAt).TotalDays;
             var inTrial = daysSinceRegistration <= 30;
+
             _logger.LogInformation(
                 "🎯 FreeTrial kontrol | UserId={Id} | KayıtTarihi={Date} | GünFarkı={Days:F1} | ÜcretsizMi={Free}",
                 userId, user.CreatedAt, daysSinceRegistration, inTrial);
+
             return inTrial;
         }
         catch (Exception ex)
