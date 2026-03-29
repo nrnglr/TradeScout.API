@@ -42,8 +42,8 @@ public class GeminiSearchService : IGeminiSearchService
     private int _currentKeyIndex = 0;
     
     // Rate limiting settings
-    private const int MAX_REQUESTS_PER_KEY_PER_MINUTE = 50; // Conservative limit
-    private const int COOLDOWN_SECONDS = 2; // Cooldown between same key usage
+    private const int MAX_REQUESTS_PER_KEY_PER_MINUTE = 12; // gemini-1.5-flash free tier = 15/min, conservative
+    private const int COOLDOWN_SECONDS = 5; // Cooldown between same key usage
     
     // Batch size for processing (prevents 504 Gateway Timeout)
     private const int DEFAULT_BATCH_SIZE = 60;
@@ -221,17 +221,26 @@ public class GeminiSearchService : IGeminiSearchService
             _logger.LogInformation("📦 {BatchCount} paralel istek yapılacak (batch size: {BatchSize})", 
                 batchCount, batchSize);
             
-            var tasks = new List<Task<List<BusinessDto>>>();
+            var resultList = new List<List<BusinessDto>>();
             
             for (int i = 0; i < batchCount; i++)
             {
                 int offset = i * batchSize;
                 int targetCount = Math.Min(batchSize, maxResults - offset);
                 var prompt = BuildSearchPromptWithOffset(sector, location, targetCount, offset, i);
-                tasks.Add(CallGeminiApiAsync(prompt, sector, city, country, i));
+                
+                var batchResult = await CallGeminiApiAsync(prompt, sector, city, country, i, cancellationToken);
+                resultList.Add(batchResult);
+                
+                // Batch'ler arasında bekleme - rate limit aşımını önler
+                if (i < batchCount - 1)
+                {
+                    _logger.LogInformation("⏳ Batch #{BatchIndex} tamamlandı, sonraki batch için 4 saniye bekleniyor...", i);
+                    await Task.Delay(4000, cancellationToken);
+                }
             }
             
-            var results = await Task.WhenAll(tasks);
+            var results = resultList.ToArray();
             
             // Sonuçları birleştir ve duplicate'leri kaldır
             var allBusinesses = results
@@ -261,8 +270,13 @@ public class GeminiSearchService : IGeminiSearchService
         string sector, 
         string city, 
         string? country,
-        int batchIndex)
+        int batchIndex,
+        CancellationToken cancellationToken = default)
     {
+        const int maxRetries = 3;
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
+        {
         try
         {
             // Get next available API key from pool (load balancing)
@@ -272,7 +286,7 @@ public class GeminiSearchService : IGeminiSearchService
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromMinutes(3);
             
-            var apiUrl = $"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={apiKey}";
+            var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={apiKey}";
             
             var requestBody = new
             {
@@ -285,6 +299,11 @@ public class GeminiSearchService : IGeminiSearchService
                             new { text = prompt }
                         }
                     }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.1,
+                    responseMimeType = "application/json"
                 }
             };
 
@@ -294,14 +313,24 @@ public class GeminiSearchService : IGeminiSearchService
                 "application/json"
             );
 
-            _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex})...", 
-                batchIndex, keyIndex);
+            _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex}, attempt {Attempt})...", 
+                batchIndex, keyIndex, attempt);
             
-            var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
-            var responseContent = await httpResponse.Content.ReadAsStringAsync();
+            var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent, cancellationToken);
+            var responseContent = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
 
             if (!httpResponse.IsSuccessStatusCode)
             {
+                // 429 = Rate limit - bekle ve tekrar dene
+                if ((int)httpResponse.StatusCode == 429 && attempt < maxRetries)
+                {
+                    int waitSeconds = attempt * 15; // 15s, 30s
+                    _logger.LogWarning("⚠️ Batch #{BatchIndex} - Rate limit (429), {Wait}s bekleniyor (deneme {Attempt}/{Max})...", 
+                        batchIndex, waitSeconds, attempt, maxRetries);
+                    await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
+                    continue;
+                }
+                
                 _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}", 
                     batchIndex, responseContent);
                 return new List<BusinessDto>();
@@ -328,11 +357,24 @@ public class GeminiSearchService : IGeminiSearchService
             
             return businesses;
         }
-        catch (Exception ex)
+        catch (TaskCanceledException)
         {
-            _logger.LogError(ex, "❌ Batch #{BatchIndex} hatası", batchIndex);
+            _logger.LogWarning("⚠️ Batch #{BatchIndex} - İstek iptal edildi", batchIndex);
             return new List<BusinessDto>();
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Batch #{BatchIndex} hatası (deneme {Attempt}/{Max})", batchIndex, attempt, maxRetries);
+            if (attempt < maxRetries)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                continue;
+            }
+            return new List<BusinessDto>();
+        }
+        } // end retry loop
+        
+        return new List<BusinessDto>();
     }
 
     /// <summary>
@@ -468,7 +510,14 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
             
             responseText = responseText.Trim();
 
-            _logger.LogDebug("🧹 Cleaned Response: {Response}", responseText);
+            // Gemini bazen JSON yerine düz metin (özür metni vb.) döndürebilir
+            // JSON ile başlamıyorsa parse etme, boş dön
+            if (!responseText.StartsWith("[") && !responseText.StartsWith("{"))
+            {
+                _logger.LogWarning("⚠️ Gemini JSON döndürmedi (düz metin). İçerik: {Preview}", 
+                    responseText.Length > 200 ? responseText.Substring(0, 200) + "..." : responseText);
+                return new List<BusinessDto>();
+            }
 
             // Parse JSON
             var options = new JsonSerializerOptions
@@ -586,7 +635,7 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
                 // Small delay between batches to avoid rate limiting
                 if (batchIndex < totalBatches - 1)
                 {
-                    await Task.Delay(500);
+                    await Task.Delay(5000);
                 }
             }
             catch (Exception ex)
@@ -620,7 +669,7 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
         var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromMinutes(3); // 3 minute timeout per batch
         
-        var apiUrl = $"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={apiKey}";
+        var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={apiKey}";
 
         var requestBody = new
         {
