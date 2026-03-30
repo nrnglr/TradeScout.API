@@ -172,7 +172,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // Aylık abonelikler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=15m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=1m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",      PriceUsd=39m,  PriceTry=1677m,  Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",               PriceUsd=79m,  PriceTry=3397m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         // Yıllık abonelikler
