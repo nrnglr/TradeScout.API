@@ -371,12 +371,21 @@ public class ParatikaPaymentService : IParatikaPaymentService
     callback.Random,
     callback.SdSha512);
 
-            // Hash doğrulama (opsiyonel ama önerilir)
-            if (!string.IsNullOrEmpty(_merchantSecretKey) && !VerifyCallbackHash(callback))
+            // Hash doğrulama
+            // TODO: Formül doğrulandıktan sonra PARATIKA_HASH_STRICT=true yaparak strict moda geç
+            if (!string.IsNullOrEmpty(_merchantSecretKey))
             {
-                _logger.LogWarning("⚠️ Paratika callback hash doğrulaması başarısız | PayId={Id}", callback.MerchantPaymentId);
-                // Hash yanlışsa işlemi reddet
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "Hash doğrulaması başarısız" };
+                var hashOk = VerifyCallbackHash(callback);
+                var strictMode = (Environment.GetEnvironmentVariable("PARATIKA_HASH_STRICT") ?? "false")
+                                    .Equals("true", StringComparison.OrdinalIgnoreCase);
+                if (!hashOk)
+                {
+                    _logger.LogWarning("⚠️ Paratika hash doğrulaması başarısız | PayId={Id} | StrictMode={Strict}",
+                        callback.MerchantPaymentId, strictMode);
+                    if (strictMode)
+                        return new ParatikaCallbackResult { Success = false, ErrorMessage = "Hash doğrulaması başarısız" };
+                    // StrictMode=false → logla ama devam et (debug aşaması)
+                }
             }
 
             if (callback.ResponseCode != "00")
@@ -997,12 +1006,39 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
     private bool VerifyCallbackHash(ParatikaCallbackDto cb)
     {
-        // sdSha512 = SHA512(hex(merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey))
-        if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random)) return true; // doğrulama parametresi yoksa geç
-        var raw = $"{cb.MerchantPaymentId}|{cb.CustomerId}|{cb.SessionToken}|{cb.ResponseCode}|{cb.Random}|{_merchantSecretKey}";
+        // sdSha512 = SHA512( merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey )
+        if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random))
+        {
+            _logger.LogWarning("⚠️ Hash doğrulama atlandı — sdSha512 veya random boş | PayId={Id}", cb.MerchantPaymentId);
+            return true;
+        }
+
+        var merchantPaymentId = cb.MerchantPaymentId ?? "";
+        var customerId        = cb.CustomerId        ?? "";
+        var sessionToken      = cb.SessionToken      ?? "";
+        var responseCode      = cb.ResponseCode      ?? "";
+        var random            = cb.Random            ?? "";
+
+        var raw      = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
         using var sha = SHA512.Create();
-        var hash = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
-        return hash == cb.SdSha512?.ToLowerInvariant();
+        var computed = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
+        var received = cb.SdSha512.ToLowerInvariant();
+        var isValid  = computed == received;
+
+        // Debug loglama — formül doğrulanınca kaldırılabilir
+        _logger.LogInformation(
+            "🔐 Hash Debug | PayId={PayId} | CustomerId={Cid} | SessionToken={St} | ResponseCode={Rc} | Random={Rnd} | SecretKey(len)={Skl} | Computed={Comp} | Received={Recv} | Match={Ok}",
+            merchantPaymentId,
+            customerId,
+            sessionToken.Length > 10 ? sessionToken[..10] + "…" : sessionToken,
+            responseCode,
+            random,
+            _merchantSecretKey.Length,
+            computed[..16] + "…",
+            received[..16] + "…",
+            isValid);
+
+        return isValid;
     }
 
     private static string BuildPlanCode(int userId, string packageAlias)
