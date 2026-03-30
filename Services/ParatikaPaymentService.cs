@@ -290,6 +290,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 ["CURRENCY"]          = "TRY",
                 ["INSTALLMENTCOUNT"]  = installment.ToString(),
                 ["SESSIONTYPE"]       = "PAYMENTSESSION",
+                ["INTEGRATIONTYPE"] = "HPP",
                 ["CUSTOMER"]          = request.UserId,
                 ["RETURNURL"]         = _callbackUrl,
                 ["CUSTOMDATA"]        = customData,
