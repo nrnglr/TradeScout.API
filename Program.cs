@@ -237,8 +237,8 @@ builder.Services.AddScoped<IGeminiSearchService, GeminiSearchService>(); // ✨ 
 builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
  builder.Services.AddScoped<ITradeIntelligenceService, TradeIntelligenceService>(); // 📊 Trade Intelligence Service (TODO: Service eksik)
 builder.Services.AddScoped<IPdfExportService, PdfExportService>(); // 📄 PDF Export Service (TODO: Service eksik)
-builder.Services.AddScoped<IToslaPaymentService, ToslaPaymentService>(); // 💳 Tosla Payment Service
-
+//builder.Services.AddScoped<IToslaPaymentService, ToslaPaymentService>(); // 💳 Tosla Payment Service
+builder.Services.AddHttpClient<IParatikaPaymentService, ParatikaPaymentService>();// 💳 Paratika Payment Service (HTTP Client ile)
 // ===== CONTROLLER CONFIGURATION =====
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

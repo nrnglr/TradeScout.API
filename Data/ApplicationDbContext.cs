@@ -20,6 +20,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<MarketAnalysis> MarketAnalyses { get; set; }
     public DbSet<PaymentHistory> PaymentHistories { get; set; }
     public DbSet<DiscountCode> DiscountCodes { get; set; }  // ✅ İndirim kodları tablosu
+    public DbSet<Subscription> Subscriptions { get; set; } // ✅ Paratika abonelik takibi
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -164,6 +165,42 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.TransactionId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.PaymentDate);
+        });
+
+        // Configure Subscription entity
+        modelBuilder.Entity<Subscription>(entity =>
+        {
+            entity.ToTable("Subscriptions");
+
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.UserId).HasColumnName("UserId").IsRequired();
+            entity.Property(e => e.PlanCode).HasColumnName("PlanCode").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.PackageAlias).HasColumnName("PackageAlias").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.PackageName).HasColumnName("PackageName").HasMaxLength(50);
+            entity.Property(e => e.Amount).HasColumnName("Amount").HasPrecision(18, 2).IsRequired();
+            entity.Property(e => e.Period).HasColumnName("Period").HasMaxLength(10).HasDefaultValue("MONTHLY");
+            entity.Property(e => e.Status).HasColumnName("Status").HasMaxLength(20).HasDefaultValue("ACTIVE");
+            entity.Property(e => e.StartDate).HasColumnName("StartDate").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.NextBillingDate).HasColumnName("NextBillingDate");
+            entity.Property(e => e.CancelledAt).HasColumnName("CancelledAt");
+            entity.Property(e => e.CancelReason).HasColumnName("CancelReason").HasMaxLength(500);
+            entity.Property(e => e.CardToken).HasColumnName("CardToken").HasMaxLength(128);
+            entity.Property(e => e.CardLastFour).HasColumnName("CardLastFour").HasMaxLength(4);
+            entity.Property(e => e.CardBrand).HasColumnName("CardBrand").HasMaxLength(20);
+            entity.Property(e => e.DiscountCode).HasColumnName("DiscountCode").HasMaxLength(50);
+            entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt").HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Foreign key
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexes
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.PlanCode).IsUnique();
+            entity.HasIndex(e => e.Status);
         });
     }
 }
