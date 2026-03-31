@@ -1008,32 +1008,42 @@ public class ParatikaPaymentService : IParatikaPaymentService
     // ─── Yardımcı metodlar ────────────────────────────────────────────────────
 private bool VerifyCallbackHash(ParatikaCallbackDto cb)
 {
-    // 1. Parametreleri hazırla (Boş gelme ihtimaline karşı "" ata)
     string merchantPaymentId = cb.MerchantPaymentId ?? "";
-    string customerId        = cb.CustomerId ?? ""; 
     string sessionToken      = cb.SessionToken ?? "";
     string responseCode      = cb.ResponseCode ?? "";
     string random            = cb.Random ?? "";
     
-    // Banka zaten reddettiyse (Code != 00), hash doğrulamasına takılmadan hata sayfasına gidelim
-    if (responseCode != "00") 
+    // GİZLİ KAHRAMAN: Paratika hash'i hesaplarken Initialize'da gönderdiğin CUSTOMER (UserId) değerini kullanıyor, 
+    // AMA callback'te bunu geri göndermiyor! Bu yüzden araya "||" boşluk giriyordu.
+    // Çözüm: Sipariş numarasından ("FGS...0000003") UserId'yi bulup araya eklemek.
+    string customerId = cb.CustomerId ?? "";
+    if (string.IsNullOrEmpty(customerId) && merchantPaymentId.StartsWith("FGS") && merchantPaymentId.Length > 13)
     {
-        _logger.LogWarning("⚠️ Banka işlemi reddetti (Code: {Code}), hash bypass ediliyor.", responseCode);
-        return true; 
+        if (int.TryParse(merchantPaymentId.Substring(13), out int uid))
+        {
+            customerId = uid.ToString(); // "0000003" -> "3"
+        }
     }
 
-    // DİKKAT: Aradaki '|' (pipe) işaretlerini KALDIRDIK. Paratika dümdüz birleştirme ister!
-    var raw = $"{merchantPaymentId}{customerId}{sessionToken}{responseCode}{random}{_merchantSecretKey}";
+    if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(random)) 
+    {
+        _logger.LogWarning("⚠️ Hash parametreleri eksik!");
+        return false; 
+    }
+
+    // DİKKAT: Pipe '|' işaretleri GERİ GELDİ! Paratika'nın asıl formülü bu.
+    var raw = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
     
     using var sha = SHA512.Create();
     var hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
-    
-    // Hex formatında BÜYÜK HARF
     var computedHash = Convert.ToHexString(hashBytes).ToUpperInvariant();
     var incomingHash = (cb.SdSha512 ?? "").ToUpperInvariant();
 
     _logger.LogInformation("🔍 HASH DETAY | Raw: {Raw}", raw);
     _logger.LogInformation("🔍 HASH KONTROL | Hesaplanan: {CH} | Gelen: {GH}", computedHash, incomingHash);
+
+    // Başarısız işlemlerde banka hatasını görmek için hash bypass edilebilir
+    if (responseCode != "00") return true; 
 
     return computedHash == incomingHash;
 }
