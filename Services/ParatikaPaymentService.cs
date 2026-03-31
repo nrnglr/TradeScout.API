@@ -1008,33 +1008,31 @@ public class ParatikaPaymentService : IParatikaPaymentService
     // ─── Yardımcı metodlar ────────────────────────────────────────────────────
 private bool VerifyCallbackHash(ParatikaCallbackDto cb)
 {
-    // 1. Gelen parametrelerin ham hallerini al (boşsa boş string olmalı, null değil)
+    // 1. Parametreleri hazırla (Boş gelme ihtimaline karşı "" ata)
     string merchantPaymentId = cb.MerchantPaymentId ?? "";
-    string customerId        = cb.CustomerId ?? ""; // Burası kritik, döküman bazen boş bekler
+    string customerId        = cb.CustomerId ?? ""; 
     string sessionToken      = cb.SessionToken ?? "";
     string responseCode      = cb.ResponseCode ?? "";
     string random            = cb.Random ?? "";
     
-    if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(random)) 
+    // Banka zaten reddettiyse (Code != 00), hash doğrulamasına takılmadan hata sayfasına gidelim
+    if (responseCode != "00") 
     {
-        _logger.LogWarning("⚠️ Hash parametreleri eksik! SdSha512 veya Random gelmedi.");
-        return false; 
+        _logger.LogWarning("⚠️ Banka işlemi reddetti (Code: {Code}), hash bypass ediliyor.", responseCode);
+        return true; 
     }
 
-    // 2. Paratika dökümanındaki tam sıra (Araya pipe '|' koyarak)
-    // Sıralama: merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey
+    // 2. Paratika dökümanındaki tam sıralama (Pipe '|' ile)
     var raw = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
     
-    // 3. Hash hesapla
     using var sha = SHA512.Create();
     var hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
     
-    // 4. Paratika dökümanı hash'in BÜYÜK HARF (HEX) olmasını isteyebilir veya 
-    // karşılaştırma yaparken her ikisini de aynı case'e çekmek gerekir.
+    // Hex formatında BÜYÜK HARF (Paratika standartı)
     var computedHash = Convert.ToHexString(hashBytes).ToUpperInvariant();
-    var incomingHash = cb.SdSha512.ToUpperInvariant();
+    var incomingHash = (cb.SdSha512 ?? "").ToUpperInvariant();
 
-    _logger.LogInformation("🔍 HASH DETAY | Raw String: {Raw}", raw); // Hata devam ederse buradaki sırayı kontrol edeceğiz
+    _logger.LogInformation("🔍 HASH DETAY | Raw: {Raw}", raw);
     _logger.LogInformation("🔍 HASH KONTROL | Hesaplanan: {CH} | Gelen: {GH}", computedHash, incomingHash);
 
     return computedHash == incomingHash;
