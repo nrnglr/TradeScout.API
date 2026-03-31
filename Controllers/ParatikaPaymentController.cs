@@ -59,15 +59,16 @@ public class ParatikaPaymentController : ControllerBase
     }
 
     // ─── POST /api/payment/paratika/callback ─────────────────────────────────
-    [HttpPost("callback")]
-    [AllowAnonymous]
-    public async Task<IActionResult> Callback([FromForm] IFormCollection form)
-    {
-        _logger.LogInformation("🔔 Paratika Callback alındı | Keys={Keys}",
-            string.Join(", ", form.Keys));
+   [HttpPost("callback")]
+[AllowAnonymous]
+public async Task<IActionResult> Callback([FromForm] IFormCollection form)
+{
+    // Loglara düşen 'sdSha512' veya 'SD_SHA512' karmaşasını çözmek için:
+    var incomingHash = form["sdSha512"].ToString();
+    if (string.IsNullOrEmpty(incomingHash)) incomingHash = form["SD_SHA512"].ToString();
 
-        var callback = new ParatikaCallbackDto
-        {
+    var callback = new ParatikaCallbackDto
+    {
             MerchantPaymentId = form["merchantPaymentId"],
             ApiMerchantId     = form["apiMerchantId"],
             SessionToken      = form["sessionToken"],
@@ -93,21 +94,25 @@ public class ParatikaPaymentController : ControllerBase
             CustomData        = form["customData"],
         };
 
-        var result = await _paymentService.ProcessCallbackAsync(callback);
+       var result = await _paymentService.ProcessCallbackAsync(callback);
 
-        string frontendUrl;
-        if (result.Success)
-        {
-            frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}";
-        }
-        else
-        {
-            var errorCode = Uri.EscapeDataString(result.BankErrorCode ?? "");
-            frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}";
-        }
-
-        return Redirect(frontendUrl);
+    // EĞER HASH HATASI VARSA BİLE FRONTEND'E YÖNLENDİR Kİ KULLANICI EKRANDA KILITLI KALMASIN
+    string frontendUrl;
+    if (result.Success)
+    {
+        frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}";
     }
+    else
+    {
+        _logger.LogError("Ödeme başarısız veya Hash hatalı: {Msg}", result.ErrorMessage);
+        var errorCode = Uri.EscapeDataString(result.BankErrorCode ?? "HASH_ERROR");
+        frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}";
+    }
+
+    // Paratika POST Callback attığı için HTTP 302 Redirect bazen tarayıcıda sorun yaratabilir.
+    // HTML bazlı bir yönlendirme döndürmek en garanti yoldur:
+    return Content($"<html><head><script>window.location.href='{frontendUrl}';</script></head><body>Yönlendiriliyorsunuz...</body></html>", "text/html");
+}
 
     // ─── POST /api/payment/paratika/verify ───────────────────────────────────
     [HttpPost("verify")]

@@ -1019,15 +1019,29 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
     // ─── Yardımcı metodlar ────────────────────────────────────────────────────
 
-    private bool VerifyCallbackHash(ParatikaCallbackDto cb)
+   private bool VerifyCallbackHash(ParatikaCallbackDto cb)
+{
+    // Loglarda 'SD_SHA512' ve 'sdSha512' anahtarlarının her ikisinin de geldiği görünüyor.
+    // Paratika dokümanına göre sıralama: merchantPaymentId | customerId | sessionToken | responseCode | random | secretKey
+    
+    if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random)) 
     {
-        // sdSha512 = SHA512(hex(merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey))
-        if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random)) return true; // doğrulama parametresi yoksa geç
-        var raw = $"{cb.MerchantPaymentId}|{cb.CustomerId}|{cb.SessionToken}|{cb.ResponseCode}|{cb.Random}|{_merchantSecretKey}";
-        using var sha = SHA512.Create();
-        var hash = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
-        return hash == cb.SdSha512?.ToLowerInvariant();
+        _logger.LogWarning("Hash parametreleri eksik! SdSha512: {H}, Random: {R}", cb.SdSha512, cb.Random);
+        return false; 
     }
+
+    // Paratika bazen customerId boşsa onu string.Empty olarak bekler.
+    var customerId = cb.CustomerId ?? "";
+    var raw = $"{cb.MerchantPaymentId}|{customerId}|{cb.SessionToken}|{cb.ResponseCode}|{cb.Random}|{_merchantSecretKey}";
+    
+    using var sha = SHA512.Create();
+    var hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+    var computedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
+    _logger.LogInformation("Hash Karşılaştırma -> Hesaplanan: {CH} | Gelen: {GH}", computedHash, cb.SdSha512.ToLowerInvariant());
+
+    return computedHash == cb.SdSha512.ToLowerInvariant();
+}
 
     private static string BuildPlanCode(int userId, string packageAlias)
     {
