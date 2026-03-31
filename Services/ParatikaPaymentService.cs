@@ -1022,13 +1022,13 @@ private bool VerifyCallbackHash(ParatikaCallbackDto cb)
         return true; 
     }
 
-    // 2. Paratika dökümanındaki tam sıralama (Pipe '|' ile)
-    var raw = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
+    // DİKKAT: Aradaki '|' (pipe) işaretlerini KALDIRDIK. Paratika dümdüz birleştirme ister!
+    var raw = $"{merchantPaymentId}{customerId}{sessionToken}{responseCode}{random}{_merchantSecretKey}";
     
     using var sha = SHA512.Create();
     var hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
     
-    // Hex formatında BÜYÜK HARF (Paratika standartı)
+    // Hex formatında BÜYÜK HARF
     var computedHash = Convert.ToHexString(hashBytes).ToUpperInvariant();
     var incomingHash = (cb.SdSha512 ?? "").ToUpperInvariant();
 
