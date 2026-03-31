@@ -359,136 +359,124 @@ public class ParatikaPaymentService : IParatikaPaymentService
     //      a) Üyeliği aktifleştir / kredi ekle
     //      b) Abonelik paketiyse → ADDRECURRINGPLAN + ADDRECURRINGPLANCARD
     // ═════════════════════════════════════════════════════════════════════════
-    public async Task<ParatikaCallbackResult> ProcessCallbackAsync(ParatikaCallbackDto callback)
+   public async Task<ParatikaCallbackResult> ProcessCallbackAsync(ParatikaCallbackDto callback)
+{
+    try
     {
-        try
+        _logger.LogInformation("🔔 Paratika Callback Başladı | PayId={Id} | Code={Code}", 
+            callback.MerchantPaymentId, callback.ResponseCode);
+
+        // 1. GÜVENLİK ADIMI: Hash Doğrulaması (VerifyCallbackHash metodunu güncellediğini varsayıyoruz)
+        // Eğer bu adım fail verirse, ödeme bankadan onaylansa bile biz işlemeyiz.
+        if (!string.IsNullOrEmpty(_merchantSecretKey) && !VerifyCallbackHash(callback))
         {
-            _logger.LogInformation(
-                "🔔 Paratika Callback | PayId={Id} | Code={Code} | CardToken={Token}",
-                callback.MerchantPaymentId, callback.ResponseCode,
-                string.IsNullOrEmpty(callback.CardToken) ? "YOK" : "VAR");
-
-            // Hash doğrulama (opsiyonel ama önerilir)
-            if (!string.IsNullOrEmpty(_merchantSecretKey) && !VerifyCallbackHash(callback))
-            {
-                _logger.LogWarning("⚠️ Paratika callback hash doğrulaması başarısız | PayId={Id}", callback.MerchantPaymentId);
-                // Hash yanlışsa işlemi reddet
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "Hash doğrulaması başarısız" };
-            }
-
-            if (callback.ResponseCode != "00")
-            {
-                _logger.LogWarning("❌ Paratika ödeme başarısız | Code={Code} | Err={Err}", callback.ResponseCode, callback.ErrorMsg);
-                await SaveFailedPaymentAsync(callback);
-                return new ParatikaCallbackResult { Success = false, MerchantPaymentId = callback.MerchantPaymentId, ErrorMessage = callback.ErrorMsg, BankErrorCode = callback.PgTranErrorCode ?? callback.ResponseCode };
-            }
-
-            // CustomData'yı parse et
-            var customData = ParseCustomData(callback.CustomData);
-            if (customData == null)
-            {
-                // Paratika CUSTOMDATA'yı geri göndermeyebilir — fallback: MerchantPaymentId'den UserId çıkar
-                _logger.LogWarning("⚠️ CustomData boş, MerchantPaymentId'den UserId çıkarılıyor | PayId={Id}", callback.MerchantPaymentId);
-                var fallbackUserId = ExtractUserIdFromPaymentId(callback.MerchantPaymentId);
-                if (fallbackUserId == 0)
-                {
-                    _logger.LogError("❌ CustomData ve MerchantPaymentId'den UserId alınamadı | PayId={Id}", callback.MerchantPaymentId);
-                    return new ParatikaCallbackResult { Success = false, ErrorMessage = "CustomData parse hatası" };
-                }
-                // Tutara göre paket tahmin et
-                var fallbackAmount = ParseAmount(callback.Amount);
-                var fallbackProductCode = GuessProductCodeFromAmount(fallbackAmount);
-                customData = new ParatikaCustomData
-                {
-                    UserId          = fallbackUserId.ToString(),
-                    ProductCode     = fallbackProductCode,
-                    Credits         = 0,   // FindPackage'dan doldurulacak
-                    IsCredit        = false,
-                    IsYearly        = false,
-                    DurationDays    = 30,
-                    DiscountPercent = 0,
-                    OriginalPrice   = fallbackAmount,
-                    DiscountedPrice = fallbackAmount
-                };
-                _logger.LogInformation("✅ Fallback customData oluşturuldu | UserId={Uid} | ProductCode={Pc}", fallbackUserId, fallbackProductCode);
-            }
-
-            // Duplicate kontrolü
-            var exists = await _dbContext.PaymentHistories
-                .AnyAsync(p => p.OrderId == callback.MerchantPaymentId && p.Status == "SUCCESS");
-            if (exists)
-            {
-                _logger.LogWarning("⚠️ Duplicate callback engellendi | PayId={Id}", callback.MerchantPaymentId);
-                return new ParatikaCallbackResult { Success = true, MerchantPaymentId = callback.MerchantPaymentId };
-            }
-
-            // Kullanıcı ve paket bul
-            if (!int.TryParse(customData.UserId, out int userId))
-            {
-                _logger.LogError("❌ UserId parse hatası: {Uid}", customData.UserId);
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "UserId geçersiz" };
-            }
-
-            var user = await _dbContext.Users.FindAsync(userId);
-            if (user == null)
-            {
-                _logger.LogError("❌ Kullanıcı bulunamadı | UserId={Id}", userId);
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "Kullanıcı bulunamadı" };
-            }
-
-            var package = FindPackage(customData.ProductCode);
-            if (package == null)
-            {
-                _logger.LogError("❌ Paket bulunamadı | Code={Code}", customData.ProductCode);
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "Paket bulunamadı" };
-            }
-
-            // İndirim kodu kullanım sayısını artır
-            await IncrementDiscountCodeUsageAsync(customData.DiscountCode);
-
-            // Üyelik/Kredi aktifleştir
-            await ActivateMembershipOrCreditsAsync(user, package);
-
-            // Ödeme kaydı
-            decimal finalAmount = customData.DiscountedPrice > 0 ? customData.DiscountedPrice : package.PriceTry;
-            await SavePaymentHistoryAsync(callback, package, userId, customData, finalAmount);
-
-            bool isSubscription = !package.IsCredit;
-
-            // ── Abonelik paketi → Recurring Plan kur ─────────────────────────
-            if (isSubscription)
-            {
-                if (string.IsNullOrEmpty(callback.CardToken))
-                {
-                    // HPP'de kullanıcı "kartı kaydet" işaretlememişse token gelmez.
-                    // Bu durumda recurring kuramayız — log at, aboneliği yine de kaydet
-                    // ama "kart kaydedilmedi" uyarısı ver.
-                    _logger.LogWarning("⚠️ CardToken YOK — HPP'de kart kaydedilmemiş. Recurring kurulamıyor | PayId={Id}", callback.MerchantPaymentId);
-                    await SaveSubscriptionWithoutCardAsync(userId, package, customData, callback);
-                }
-                else
-                {
-                    _logger.LogInformation("🔄 Recurring plan kuruluyor | UserId={Id} | Paket={Pkg}", userId, package.Name);
-                    await SetupRecurringAsync(userId, package, callback, customData, finalAmount);
-                }
-            }
-
-            _logger.LogInformation("🎉 Paratika callback tamamlandı | PayId={Id} | UserId={Id2} | IsSubscription={Sub}",
-                callback.MerchantPaymentId, userId, isSubscription);
-
-            return new ParatikaCallbackResult
-            {
-                Success           = true,
-                IsSubscription    = isSubscription,
-                MerchantPaymentId = callback.MerchantPaymentId
+            _logger.LogWarning("⚠️ HASH_ERROR: Güvenlik imzası hatalı! PayId={Id}", callback.MerchantPaymentId);
+            return new ParatikaCallbackResult 
+            { 
+                Success = false, 
+                ErrorMessage = "Güvenlik doğrulaması başarısız (Hash Error)", 
+                BankErrorCode = "HASH_ERROR" 
             };
         }
-        catch (Exception ex)
+
+        // 2. BANKA YANITI KONTROLÜ
+        if (callback.ResponseCode != "00")
         {
-            _logger.LogError(ex, "❌ Paratika callback hatası | PayId={Id}", callback.MerchantPaymentId);
-            return new ParatikaCallbackResult { Success = false, ErrorMessage = ex.Message };
+            _logger.LogWarning("❌ Ödeme Başarısız | Code={Code} | Msg={Msg}", callback.ResponseCode, callback.ErrorMsg);
+            await SaveFailedPaymentAsync(callback);
+            return new ParatikaCallbackResult 
+            { 
+                Success = false, 
+                MerchantPaymentId = callback.MerchantPaymentId, 
+                ErrorMessage = callback.ErrorMsg, 
+                BankErrorCode = callback.PgTranErrorCode ?? callback.ResponseCode 
+            };
         }
+
+        // 3. VERİ PARSE VE KURTARMA (Fallback)
+        // Paratika'nın gönderdiği CUSTOMDATA'yı okuyoruz.
+        var customData = ParseCustomData(callback.CustomData);
+        
+        if (customData == null)
+        {
+            _logger.LogWarning("⚠️ CustomData boş, manuel veri kurtarma (Fallback) devrede | PayId={Id}", callback.MerchantPaymentId);
+            
+            // Sipariş numarasından (FGS...) UserId'yi çıkarıyoruz.
+            var fallbackUserId = ExtractUserIdFromPaymentId(callback.MerchantPaymentId);
+            if (fallbackUserId == 0) throw new Exception("UserId hiçbir şekilde tespit edilemedi.");
+
+            // Tutara bakıp hangi paketi aldığını tahmin ediyoruz.
+            var fallbackAmount = ParseAmount(callback.Amount);
+            var fallbackProductCode = GuessProductCodeFromAmount(fallbackAmount);
+
+            customData = new ParatikaCustomData
+            {
+                UserId = fallbackUserId.ToString(),
+                ProductCode = fallbackProductCode,
+                DiscountedPrice = fallbackAmount
+            };
+        }
+
+        // 4. DUPLICATE KONTROLÜ
+        var alreadySuccess = await _dbContext.PaymentHistories
+            .AnyAsync(p => p.OrderId == callback.MerchantPaymentId && p.Status == "SUCCESS");
+        
+        if (alreadySuccess)
+        {
+            _logger.LogWarning("⚠️ Bu işlem zaten başarıyla işlenmiş (Duplicate) | PayId={Id}", callback.MerchantPaymentId);
+            return new ParatikaCallbackResult { Success = true, MerchantPaymentId = callback.MerchantPaymentId };
+        }
+
+        // 5. KULLANICI VE PAKET TESPİTİ
+        int userId = int.Parse(customData.UserId);
+        var user = await _dbContext.Users.FindAsync(userId);
+        var package = FindPackage(customData.ProductCode);
+
+        if (user == null || package == null)
+        {
+            _logger.LogError("❌ Kullanıcı veya Paket bulunamadı! UserId={Uid}, Code={Pc}", userId, customData.ProductCode);
+            return new ParatikaCallbackResult { Success = false, ErrorMessage = "Veritabanı eşleşme hatası" };
+        }
+
+        // 6. AKTİVASYON VE KAYIT
+        // İndirim kodunu güncelle, üyeliği/krediyi tanımla ve geçmişe kaydet.
+        await IncrementDiscountCodeUsageAsync(customData.DiscountCode);
+        await ActivateMembershipOrCreditsAsync(user, package);
+
+        decimal finalAmount = customData.DiscountedPrice > 0 ? customData.DiscountedPrice : package.PriceTry;
+        await SavePaymentHistoryAsync(callback, package, userId, customData, finalAmount);
+
+        // 7. ABONELİK (RECURRING) YÖNETİMİ
+        bool isSubscription = !package.IsCredit;
+        if (isSubscription)
+        {
+            if (string.IsNullOrEmpty(callback.CardToken))
+            {
+                _logger.LogWarning("⚠️ Abonelik paketi ama Kart Kaydı Yapılmamış (CardToken YOK) | PayId={Id}", callback.MerchantPaymentId);
+                await SaveSubscriptionWithoutCardAsync(userId, package, customData, callback);
+            }
+            else
+            {
+                _logger.LogInformation("🔄 Recurring Plan Hazırlanıyor | UserId={Id}", userId);
+                await SetupRecurringAsync(userId, package, callback, customData, finalAmount);
+            }
+        }
+
+        _logger.LogInformation("🎉 İşlem Başarıyla Tamamlandı | PayId={Id} | UserId={Uid}", callback.MerchantPaymentId, userId);
+
+        return new ParatikaCallbackResult
+        {
+            Success = true,
+            IsSubscription = isSubscription,
+            MerchantPaymentId = callback.MerchantPaymentId
+        };
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "❌ Paratika Callback Kritik Hata | PayId={Id}", callback.MerchantPaymentId);
+        return new ParatikaCallbackResult { Success = false, ErrorMessage = "Sistem hatası: " + ex.Message };
+    }
+}
 
     // ═════════════════════════════════════════════════════════════════════════
     // 3. RECURRING NOTIFICATION — Paratika otomatik çekim yaptığında bildirir
@@ -1018,29 +1006,38 @@ public class ParatikaPaymentService : IParatikaPaymentService
     }
 
     // ─── Yardımcı metodlar ────────────────────────────────────────────────────
-
-   private bool VerifyCallbackHash(ParatikaCallbackDto cb)
+private bool VerifyCallbackHash(ParatikaCallbackDto cb)
 {
-    // Loglarda 'SD_SHA512' ve 'sdSha512' anahtarlarının her ikisinin de geldiği görünüyor.
-    // Paratika dokümanına göre sıralama: merchantPaymentId | customerId | sessionToken | responseCode | random | secretKey
+    // 1. Gelen parametrelerin ham hallerini al (boşsa boş string olmalı, null değil)
+    string merchantPaymentId = cb.MerchantPaymentId ?? "";
+    string customerId        = cb.CustomerId ?? ""; // Burası kritik, döküman bazen boş bekler
+    string sessionToken      = cb.SessionToken ?? "";
+    string responseCode      = cb.ResponseCode ?? "";
+    string random            = cb.Random ?? "";
     
-    if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random)) 
+    if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(random)) 
     {
-        _logger.LogWarning("Hash parametreleri eksik! SdSha512: {H}, Random: {R}", cb.SdSha512, cb.Random);
+        _logger.LogWarning("⚠️ Hash parametreleri eksik! SdSha512 veya Random gelmedi.");
         return false; 
     }
 
-    // Paratika bazen customerId boşsa onu string.Empty olarak bekler.
-    var customerId = cb.CustomerId ?? "";
-    var raw = $"{cb.MerchantPaymentId}|{customerId}|{cb.SessionToken}|{cb.ResponseCode}|{cb.Random}|{_merchantSecretKey}";
+    // 2. Paratika dökümanındaki tam sıra (Araya pipe '|' koyarak)
+    // Sıralama: merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey
+    var raw = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
     
+    // 3. Hash hesapla
     using var sha = SHA512.Create();
     var hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
-    var computedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+    
+    // 4. Paratika dökümanı hash'in BÜYÜK HARF (HEX) olmasını isteyebilir veya 
+    // karşılaştırma yaparken her ikisini de aynı case'e çekmek gerekir.
+    var computedHash = Convert.ToHexString(hashBytes).ToUpperInvariant();
+    var incomingHash = cb.SdSha512.ToUpperInvariant();
 
-    _logger.LogInformation("Hash Karşılaştırma -> Hesaplanan: {CH} | Gelen: {GH}", computedHash, cb.SdSha512.ToLowerInvariant());
+    _logger.LogInformation("🔍 HASH DETAY | Raw String: {Raw}", raw); // Hata devam ederse buradaki sırayı kontrol edeceğiz
+    _logger.LogInformation("🔍 HASH KONTROL | Hesaplanan: {CH} | Gelen: {GH}", computedHash, incomingHash);
 
-    return computedHash == cb.SdSha512.ToLowerInvariant();
+    return computedHash == incomingHash;
 }
 
     private static string BuildPlanCode(int userId, string packageAlias)
