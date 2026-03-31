@@ -83,6 +83,7 @@ public class ParatikaCallbackDto
     public string? ResponseMsg       { get; set; }
     public string? ErrorCode         { get; set; }
     public string? ErrorMsg          { get; set; }
+    public string? PgTranErrorCode   { get; set; }  // Banka ISO hata kodu (51, 05, 14 vb.)
     public string? Amount            { get; set; }
     public string? Currency          { get; set; }
     public string? InstallmentCount  { get; set; }
@@ -103,6 +104,7 @@ public class ParatikaCallbackResult
     public bool    IsSubscription    { get; set; }
     public string? MerchantPaymentId { get; set; }
     public string? ErrorMessage      { get; set; }
+    public string? BankErrorCode     { get; set; }  // Frontend hata mesajı için banka ISO kodu
 }
 
 public class ParatikaRecurringNotificationDto
@@ -172,7 +174,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // Aylık abonelikler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=15m,  PriceTry=645m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=15m,  PriceTry=1m,     Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",      PriceUsd=39m,  PriceTry=1677m,  Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",               PriceUsd=79m,  PriceTry=3397m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         // Yıllık abonelikler
@@ -298,17 +300,17 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 {
                     new
                     {
-                        code     = package.ProductCode,
-                        name     = package.NameTr,
-                        quantity = 1,
-                        price    = amountStr,
-                        currency = "TRY"
+                        productCode = package.ProductCode,
+                        name        = package.Name,
+                        description = package.Name,
+                        quantity    = 1,
+                        amount      = finalPrice
                     }
                 }),
             };
 
-            _logger.LogInformation("▶ Paratika SessionToken | PayId={Id} | Paket={Pkg} | Taksit={Inst} | Tutar={Amt} TL",
-                merchantPayId, package.Name, installment, amountStr);
+            _logger.LogInformation("▶ Paratika SessionToken | PayId={Id} | Paket={Pkg} | Taksit={Inst} | Tutar={Amt} TL | OrderItems={OI}",
+                merchantPayId, package.Name, installment, amountStr, form["ORDERITEMS"]);
 
             var resp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(form));
             var raw  = await resp.Content.ReadAsStringAsync();
@@ -378,7 +380,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
             {
                 _logger.LogWarning("❌ Paratika ödeme başarısız | Code={Code} | Err={Err}", callback.ResponseCode, callback.ErrorMsg);
                 await SaveFailedPaymentAsync(callback);
-                return new ParatikaCallbackResult { Success = false, MerchantPaymentId = callback.MerchantPaymentId, ErrorMessage = callback.ErrorMsg };
+                return new ParatikaCallbackResult { Success = false, MerchantPaymentId = callback.MerchantPaymentId, ErrorMessage = callback.ErrorMsg, BankErrorCode = callback.PgTranErrorCode ?? callback.ResponseCode };
             }
 
             // CustomData'yı parse et
@@ -656,7 +658,10 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 .FirstOrDefaultAsync();
 
             if (existing != null)
-                return new PaymentVerificationResult { Success = true, IsAlreadyProcessed = true, CreditsAdded = existing.CreditsAdded, PackageName = existing.PackageName, UserId = existing.UserId };
+            {
+                var existingUser = await _dbContext.Users.FindAsync(existing.UserId);
+                return new PaymentVerificationResult { Success = true, IsAlreadyProcessed = true, CreditsAdded = existing.CreditsAdded, PackageName = existing.PackageName, UserId = existing.UserId, MembershipEnd = existingUser?.MembershipEnd };
+            }
 
             var query = await QueryTransactionAsync(merchantPaymentId);
             if (query == null || query.ResponseCode != "00")
@@ -684,13 +689,15 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
                 .FirstOrDefaultAsync();
 
+            var user = payment != null ? await _dbContext.Users.FindAsync(payment.UserId) : null;
             return new PaymentVerificationResult
             {
                 Success            = true,
                 IsAlreadyProcessed = false,
                 CreditsAdded       = payment?.CreditsAdded ?? 0,
                 PackageName        = payment?.PackageName ?? "",
-                UserId             = payment?.UserId ?? 0
+                UserId             = payment?.UserId ?? 0,
+                MembershipEnd      = user?.MembershipEnd
             };
         }
         catch (Exception ex)

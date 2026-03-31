@@ -12,6 +12,9 @@ public class ParatikaPaymentController : ControllerBase
     private readonly IParatikaPaymentService            _paymentService;
     private readonly ILogger<ParatikaPaymentController> _logger;
 
+    private static readonly string FrontendBaseUrl =
+        Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
+
     public ParatikaPaymentController(
         IParatikaPaymentService paymentService,
         ILogger<ParatikaPaymentController> logger)
@@ -26,10 +29,6 @@ public class ParatikaPaymentController : ControllerBase
     public IActionResult GetPackages() => Ok(_paymentService.GetAvailablePackages());
 
     // ─── POST /api/payment/paratika/initialize ───────────────────────────────
-    /// <summary>
-    /// Frontend bu endpoint'i çağırır → paymentUrl alır → kullanıcıyı yönlendirir.
-    /// Hem abonelik hem extra kredi için aynı endpoint kullanılır.
-    /// </summary>
     [HttpPost("initialize")]
     [Authorize]
     public async Task<IActionResult> Initialize([FromBody] ParatikaInitRequest body)
@@ -60,10 +59,6 @@ public class ParatikaPaymentController : ControllerBase
     }
 
     // ─── POST /api/payment/paratika/callback ─────────────────────────────────
-    /// <summary>
-    /// Paratika ödeme sonucunu buraya POST eder (RETURNURL).
-    /// Form-data olarak gelir. Kullanıcıyı frontend'e yönlendir.
-    /// </summary>
     [HttpPost("callback")]
     [AllowAnonymous]
     public async Task<IActionResult> Callback([FromForm] IFormCollection form)
@@ -85,10 +80,11 @@ public class ParatikaPaymentController : ControllerBase
             ResponseMsg       = form["responseMsg"],
             ErrorCode         = form["errorCode"],
             ErrorMsg          = form["errorMsg"],
+            PgTranErrorCode   = form["pgTranErrorCode"],
             Amount            = form["amount"],
             Currency          = form["currency"],
             InstallmentCount  = form["installmentCount"],
-            CardToken         = form["cardToken"],      // ← Recurring için kritik
+            CardToken         = form["cardToken"],
             CardBrand         = form["cardBrand"],
             CardPanMasked     = form["cardPanMasked"],
             PaymentSystem     = form["paymentSystem"],
@@ -99,24 +95,21 @@ public class ParatikaPaymentController : ControllerBase
 
         var result = await _paymentService.ProcessCallbackAsync(callback);
 
-        // Paratika callback'ten sonra kullanıcıyı frontend'e yönlendir
-        // (Paratika sayfadan dönerken redirect bekler)
-        var frontendUrl = result.Success
-            ? $"https://fgstrade.com/payment/success?orderId={callback.MerchantPaymentId}"
-            : $"https://fgstrade.com/payment/failed?orderId={callback.MerchantPaymentId}&error={Uri.EscapeDataString(result.ErrorMessage ?? "Ödeme başarısız")}";
+        string frontendUrl;
+        if (result.Success)
+        {
+            frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}";
+        }
+        else
+        {
+            var errorCode = Uri.EscapeDataString(result.BankErrorCode ?? "");
+            frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}";
+        }
 
         return Redirect(frontendUrl);
-
-        // ÖNEMLİ NOT: Eğer Paratika JSON bekliyor ve redirect istemiyorsa
-        // aşağıdaki satırı kullan:
-        // return Ok(new { status = result.Success ? "SUCCESS" : "FAILED" });
     }
 
     // ─── POST /api/payment/paratika/verify ───────────────────────────────────
-    /// <summary>
-    /// Frontend ödeme sayfasından döndükten sonra bunu çağırır.
-    /// Tarayıcı kapanması/kesinti güvenlik ağı.
-    /// </summary>
     [HttpPost("verify")]
     [Authorize]
     public async Task<IActionResult> Verify([FromBody] ParatikaVerifyRequest body)
@@ -127,23 +120,21 @@ public class ParatikaPaymentController : ControllerBase
         var result = await _paymentService.VerifyAndProcessPaymentAsync(body.MerchantPaymentId);
 
         if (!result.Success)
-            return BadRequest(new { error = result.ErrorMessage });
+            return BadRequest(new { message = result.ErrorMessage });
 
         return Ok(new
         {
             success            = true,
+            orderId            = body.MerchantPaymentId,
             isAlreadyProcessed = result.IsAlreadyProcessed,
             creditsAdded       = result.CreditsAdded,
             packageName        = result.PackageName,
+            membershipEnd      = result.MembershipEnd,
             userId             = result.UserId
         });
     }
 
     // ─── POST /api/payment/paratika/recurring-notification ───────────────────
-    /// <summary>
-    /// Paratika her otomatik çekim yaptığında buraya bildirim gönderir.
-    /// Paratika panelinde Notification URL olarak kayıtlı olmalı.
-    /// </summary>
     [HttpPost("recurring-notification")]
     [AllowAnonymous]
     public async Task<IActionResult> RecurringNotification([FromForm] IFormCollection form)
@@ -167,15 +158,10 @@ public class ParatikaPaymentController : ControllerBase
         };
 
         await _paymentService.ProcessRecurringNotificationAsync(notification);
-
-        // Paratika notification'a 200 OK beklediğini söylüyor
         return Ok(new { received = true });
     }
 
     // ─── DELETE /api/payment/paratika/subscription ───────────────────────────
-    /// <summary>
-    /// Kullanıcı kendi profilinden aboneliğini iptal eder.
-    /// </summary>
     [HttpDelete("subscription")]
     [Authorize]
     public async Task<IActionResult> CancelSubscription([FromBody] SubscriptionCancelRequest? body)
@@ -186,7 +172,7 @@ public class ParatikaPaymentController : ControllerBase
         if (!int.TryParse(userIdStr, out int userId))
             return Unauthorized(new { error = "Kimlik doğrulanamadı" });
 
-        var reason = body?.Reason ?? "Kullanıcı tarafından iptal edildi";
+        var reason  = body?.Reason ?? "Kullanıcı tarafından iptal edildi";
         var success = await _paymentService.CancelSubscriptionAsync(userId, reason);
 
         if (!success)
@@ -196,9 +182,6 @@ public class ParatikaPaymentController : ControllerBase
     }
 
     // ─── GET /api/payment/paratika/subscription ──────────────────────────────
-    /// <summary>
-    /// Kullanıcının aktif abonelik bilgisini getirir.
-    /// </summary>
     [HttpGet("subscription")]
     [Authorize]
     public async Task<IActionResult> GetSubscription()

@@ -58,4 +58,5 @@ public class PaymentVerificationResult
     public string? PackageName { get; set; }
     public bool IsAlreadyProcessed { get; set; }
     public int UserId { get; set; }
+    public DateTime? MembershipEnd { get; set; }
 }
