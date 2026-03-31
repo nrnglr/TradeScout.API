@@ -52,110 +52,110 @@ public interface IParatikaPaymentService
 
 public class ParatikaPaymentRequestDto
 {
-    public string ProductCode { get; set; } = string.Empty;
-    public string UserId { get; set; } = string.Empty;
-    public int Installment { get; set; } = 1;
+    public string  ProductCode  { get; set; } = string.Empty;
+    public string  UserId       { get; set; } = string.Empty;
+    public int     Installment  { get; set; } = 1;
     public string? DiscountCode { get; set; }
 }
 
 public class ParatikaPaymentResponseDto
 {
-    public bool Success { get; set; }
-    public string? PaymentUrl { get; set; }
-    public string? SessionToken { get; set; }
+    public bool    Success           { get; set; }
+    public string? PaymentUrl        { get; set; }
+    public string? SessionToken      { get; set; }
     public string? MerchantPaymentId { get; set; }
-    public string? ErrorMessage { get; set; }
-    public string? ErrorCode { get; set; }
+    public string? ErrorMessage      { get; set; }
+    public string? ErrorCode         { get; set; }
 }
 
 public class ParatikaCallbackDto
 {
     // Paratika'nın RETURNURL'e POST ettiği alanlar
     public string? MerchantPaymentId { get; set; }
-    public string? ApiMerchantId { get; set; }
-    public string? SessionToken { get; set; }
-    public string? CustomerId { get; set; }
-    public string? PgTranId { get; set; }
-    public string? PgTranDate { get; set; }
-    public string? PgTranRefId { get; set; }
-    public string? PgTranApprCode { get; set; }
-    public string? ResponseCode { get; set; }
-    public string? ResponseMsg { get; set; }
-    public string? ErrorCode { get; set; }
-    public string? ErrorMsg { get; set; }
-    public string? Amount { get; set; }
-    public string? Currency { get; set; }
-    public string? InstallmentCount { get; set; }
-    public string? CardToken { get; set; }   // ← recurring için kritik
-    public string? CardBrand { get; set; }
-    public string? CardPanMasked { get; set; }
-    public string? PaymentSystem { get; set; }
+    public string? ApiMerchantId     { get; set; }
+    public string? SessionToken      { get; set; }
+    public string? CustomerId        { get; set; }
+    public string? PgTranId          { get; set; }
+    public string? PgTranDate        { get; set; }
+    public string? PgTranRefId       { get; set; }
+    public string? PgTranApprCode    { get; set; }
+    public string? ResponseCode      { get; set; }
+    public string? ResponseMsg       { get; set; }
+    public string? ErrorCode         { get; set; }
+    public string? ErrorMsg          { get; set; }
+    public string? Amount            { get; set; }
+    public string? Currency          { get; set; }
+    public string? InstallmentCount  { get; set; }
+    public string? CardToken         { get; set; }   // ← recurring için kritik
+    public string? CardBrand         { get; set; }
+    public string? CardPanMasked     { get; set; }
+    public string? PaymentSystem     { get; set; }
     // Hash doğrulama
-    public string? Random { get; set; }
-    public string? SdSha512 { get; set; }
+    public string? Random            { get; set; }
+    public string? SdSha512          { get; set; }
     // Bizim koyduğumuz meta veri
-    public string? CustomData { get; set; }
+    public string? CustomData        { get; set; }
 }
 
 public class ParatikaCallbackResult
 {
-    public bool Success { get; set; }
-    public bool IsSubscription { get; set; }
+    public bool    Success           { get; set; }
+    public bool    IsSubscription    { get; set; }
     public string? MerchantPaymentId { get; set; }
-    public string? ErrorMessage { get; set; }
+    public string? ErrorMessage      { get; set; }
 }
 
 public class ParatikaRecurringNotificationDto
 {
     // Paratika'nın notification URL'ine gönderdiği alanlar
-    public string? PlanCode { get; set; }
+    public string? PlanCode          { get; set; }
     public string? MerchantPaymentId { get; set; }
-    public string? PgTranId { get; set; }
-    public string? ResponseCode { get; set; }
-    public string? ResponseMsg { get; set; }
-    public string? Amount { get; set; }
-    public string? Currency { get; set; }
-    public string? CardToken { get; set; }
-    public string? CardPanMasked { get; set; }
-    public string? ErrorCode { get; set; }
-    public string? Error { get; set; }
+    public string? PgTranId          { get; set; }
+    public string? ResponseCode      { get; set; }
+    public string? ResponseMsg       { get; set; }
+    public string? Amount            { get; set; }
+    public string? Currency          { get; set; }
+    public string? CardToken         { get; set; }
+    public string? CardPanMasked     { get; set; }
+    public string? ErrorCode         { get; set; }
+    public string? Error             { get; set; }
 }
 
 public class ParatikaQueryResponseDto
 {
-    public string? ResponseCode { get; set; }
-    public string? ResponseMsg { get; set; }
-    public string? PgTranId { get; set; }
-    public string? PgTranApprCode { get; set; }
-    public string? Amount { get; set; }
-    public string? InstallmentCount { get; set; }
+    public string? ResponseCode      { get; set; }
+    public string? ResponseMsg       { get; set; }
+    public string? PgTranId          { get; set; }
+    public string? PgTranApprCode    { get; set; }
+    public string? Amount            { get; set; }
+    public string? InstallmentCount  { get; set; }
     public string? MerchantPaymentId { get; set; }
-    public string? CardPanMasked { get; set; }
-    public string? ErrorCode { get; set; }
-    public string? Error { get; set; }
+    public string? CardPanMasked     { get; set; }
+    public string? ErrorCode         { get; set; }
+    public string? Error             { get; set; }
 }
 
 // ─── CustomData (session token isteğinde saklanan meta veri) ─────────────────
 internal class ParatikaCustomData
 {
-    public string UserId { get; set; } = "";
-    public string ProductCode { get; set; } = "";
-    public int Credits { get; set; }
-    public bool IsYearly { get; set; }
-    public bool IsCredit { get; set; }  // true = extra kredi, recurring YOK
-    public int DurationDays { get; set; }
-    public string? DiscountCode { get; set; }
+    public string  UserId          { get; set; } = "";
+    public string  ProductCode     { get; set; } = "";
+    public int     Credits         { get; set; }
+    public bool    IsYearly        { get; set; }
+    public bool    IsCredit        { get; set; }  // true = extra kredi, recurring YOK
+    public int     DurationDays    { get; set; }
+    public string? DiscountCode    { get; set; }
     public decimal DiscountPercent { get; set; }
-    public decimal OriginalPrice { get; set; }
+    public decimal OriginalPrice   { get; set; }
     public decimal DiscountedPrice { get; set; }
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 public class ParatikaPaymentService : IParatikaPaymentService
 {
-    private readonly HttpClient _httpClient;
+    private readonly HttpClient                      _httpClient;
     private readonly ILogger<ParatikaPaymentService> _logger;
-    private readonly ApplicationDbContext _dbContext;
+    private readonly ApplicationDbContext            _dbContext;
 
     private readonly string _merchantUser;
     private readonly string _merchantPassword;
@@ -172,7 +172,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // Aylık abonelikler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=1m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=15m,  PriceTry=645m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",      PriceUsd=39m,  PriceTry=1677m,  Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",               PriceUsd=79m,  PriceTry=3397m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         // Yıllık abonelikler
@@ -194,17 +194,17 @@ public class ParatikaPaymentService : IParatikaPaymentService
         ApplicationDbContext dbContext)
     {
         _httpClient = httpClient;
-        _logger = logger;
-        _dbContext = dbContext;
+        _logger     = logger;
+        _dbContext  = dbContext;
 
-        _merchantUser = Env("PARATIKA_MERCHANT_USER", configuration["ParatikaSettings:MerchantUser"] ?? "");
-        _merchantPassword = Env("PARATIKA_MERCHANT_PASSWORD", configuration["ParatikaSettings:MerchantPassword"] ?? "");
-        _merchant = Env("PARATIKA_MERCHANT", configuration["ParatikaSettings:Merchant"] ?? "10013146");
-        _merchantSecretKey = Env("PARATIKA_SECRET_KEY", configuration["ParatikaSettings:SecretKey"] ?? "");
-        _apiBaseUrl = Env("PARATIKA_API_BASE_URL", configuration["ParatikaSettings:ApiBaseUrl"] ?? "https://vpos.paratika.com.tr/paratika/api/v2").TrimEnd('/');
-        _hostedPageBaseUrl = Env("PARATIKA_HOSTED_PAGE_URL", configuration["ParatikaSettings:HostedPageBaseUrl"] ?? "https://vpos.paratika.com.tr/merchant/post/sale").TrimEnd('/');
-        _callbackUrl = Env("PARATIKA_CALLBACK_URL", configuration["ParatikaSettings:CallbackUrl"] ?? "https://api.fgstrade.com/api/payment/paratika/callback");
-        _recurringNotifUrl = Env("PARATIKA_RECURRING_NOTIF_URL", configuration["ParatikaSettings:RecurringNotifUrl"] ?? "https://api.fgstrade.com/api/payment/paratika/recurring-notification");
+        _merchantUser      = Env("PARATIKA_MERCHANT_USER",      configuration["ParatikaSettings:MerchantUser"]      ?? "");
+        _merchantPassword  = Env("PARATIKA_MERCHANT_PASSWORD",  configuration["ParatikaSettings:MerchantPassword"]  ?? "");
+        _merchant          = Env("PARATIKA_MERCHANT",           configuration["ParatikaSettings:Merchant"]          ?? "10013146");
+        _merchantSecretKey = Env("PARATIKA_SECRET_KEY",         configuration["ParatikaSettings:SecretKey"]         ?? "");
+        _apiBaseUrl        = Env("PARATIKA_API_BASE_URL",       configuration["ParatikaSettings:ApiBaseUrl"]        ?? "https://vpos.paratika.com.tr/paratika/api/v2").TrimEnd('/');
+        _hostedPageBaseUrl = Env("PARATIKA_HOSTED_PAGE_URL",    configuration["ParatikaSettings:HostedPageBaseUrl"] ?? "https://vpos.paratika.com.tr/merchant/post/sale").TrimEnd('/');
+        _callbackUrl       = Env("PARATIKA_CALLBACK_URL",       configuration["ParatikaSettings:CallbackUrl"]       ?? "https://api.fgstrade.com/api/payment/paratika/callback");
+        _recurringNotifUrl = Env("PARATIKA_RECURRING_NOTIF_URL",configuration["ParatikaSettings:RecurringNotifUrl"] ?? "https://api.fgstrade.com/api/payment/paratika/recurring-notification");
 
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _httpClient.DefaultRequestHeaders.Clear();
@@ -233,8 +233,8 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 installment = Math.Clamp(request.Installment, 1, package.MaxInstallment);
 
             // İndirim
-            decimal finalPrice = package.PriceTry;
-            decimal discountPercent = 0;
+            decimal finalPrice        = package.PriceTry;
+            decimal discountPercent   = 0;
 
             if (!string.IsNullOrWhiteSpace(request.DiscountCode))
             {
@@ -246,7 +246,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 if (dc != null)
                 {
                     discountPercent = dc.DiscountPercentage;
-                    finalPrice -= finalPrice * discountPercent / 100m;
+                    finalPrice     -= finalPrice * discountPercent / 100m;
                     _logger.LogInformation("💰 İndirim: {Code} %{Pct} → {Final} TL", request.DiscountCode, discountPercent, finalPrice);
                 }
                 else
@@ -256,23 +256,23 @@ public class ParatikaPaymentService : IParatikaPaymentService
             }
 
             // MerchantPaymentId — max 20 karakter (Raiffeisen uyumluluğu için kısa tutuyoruz)
-            var ts = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");  // 10 karakter
-            var uid = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
+            var ts            = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");  // 10 karakter
+            var uid           = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
             var merchantPayId = $"FGS{ts}{uid}";  // 20 karakter
             if (merchantPayId.Length > 20) merchantPayId = merchantPayId[..20];
 
             // CustomData — callback'te paket bilgisini geri almak için
             var customData = JsonSerializer.Serialize(new ParatikaCustomData
             {
-                UserId = request.UserId,
-                ProductCode = package.ProductCode,
-                Credits = package.Credits,
-                IsYearly = package.IsYearly,
-                IsCredit = package.IsCredit,
-                DurationDays = package.DurationDays,
-                DiscountCode = request.DiscountCode,
+                UserId          = request.UserId,
+                ProductCode     = package.ProductCode,
+                Credits         = package.Credits,
+                IsYearly        = package.IsYearly,
+                IsCredit        = package.IsCredit,
+                DurationDays    = package.DurationDays,
+                DiscountCode    = request.DiscountCode,
                 DiscountPercent = discountPercent,
-                OriginalPrice = package.PriceTry,
+                OriginalPrice   = package.PriceTry,
                 DiscountedPrice = finalPrice
             });
 
@@ -281,30 +281,28 @@ public class ParatikaPaymentService : IParatikaPaymentService
             // Session Token isteği
             var form = new Dictionary<string, string>
             {
-                ["ACTION"] = "SESSIONTOKEN",
-                ["MERCHANTUSER"] = _merchantUser,
-                ["MERCHANTPASSWORD"] = _merchantPassword,
-                ["MERCHANT"] = _merchant,
+                ["ACTION"]            = "SESSIONTOKEN",
+                ["MERCHANTUSER"]      = _merchantUser,
+                ["MERCHANTPASSWORD"]  = _merchantPassword,
+                ["MERCHANT"]          = _merchant,
                 ["MERCHANTPAYMENTID"] = merchantPayId,
-                ["AMOUNT"] = amountStr,
-                ["CURRENCY"] = "TRY",
-                ["INSTALLMENTCOUNT"] = installment.ToString(),
-                ["SESSIONTYPE"] = "PAYMENTSESSION",
-                ["INTEGRATIONTYPE"] = "HPP",
-                ["CUSTOMER"] = request.UserId,
-                ["RETURNURL"] = _callbackUrl,
-                ["CUSTOMDATA"] = customData,
-                ["LANG"] = "tr",
-                ["ORDERITEMS"] = JsonSerializer.Serialize(new[]
+                ["AMOUNT"]            = amountStr,
+                ["CURRENCY"]          = "TRY",
+                ["INSTALLMENTCOUNT"]  = installment.ToString(),
+                ["SESSIONTYPE"]       = "PAYMENTSESSION",
+                ["CUSTOMER"]          = request.UserId,
+                ["RETURNURL"]         = _callbackUrl,
+                ["CUSTOMDATA"]        = customData,
+                ["LANG"]              = "tr",
+                ["ORDERITEMS"]        = JsonSerializer.Serialize(new[]
                 {
                     new
                     {
                         code     = package.ProductCode,
                         name     = package.NameTr,
                         quantity = 1,
-                        amount = amountStr,
-                        currency = "TRY",
-                        description = package.NameTr,
+                        price    = amountStr,
+                        currency = "TRY"
                     }
                 }),
             };
@@ -313,7 +311,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 merchantPayId, package.Name, installment, amountStr);
 
             var resp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(form));
-            var raw = await resp.Content.ReadAsStringAsync();
+            var raw  = await resp.Content.ReadAsStringAsync();
 
             _logger.LogInformation("◀ Paratika SessionToken yanıt | HTTP={Status} | {Body}",
                 (int)resp.StatusCode, raw.Length > 400 ? raw[..400] : raw);
@@ -321,11 +319,11 @@ public class ParatikaPaymentService : IParatikaPaymentService
             if (!resp.IsSuccessStatusCode)
                 return Fail("Ödeme sistemi ile iletişim kurulamadı", ((int)resp.StatusCode).ToString());
 
-            using var doc = JsonDocument.Parse(raw, new JsonDocumentOptions { });
-            var root = doc.RootElement;
-            var respCode = GetStr(root, "responseCode", "RESPONSECODE");
-            var respMsg = GetStr(root, "responseMsg", "RESPONSEMSG", "errorMsg", "ERRORMSG") ?? "Bilinmeyen hata";
-            var sessionToken = GetStr(root, "sessionToken", "SESSIONTOKEN");
+            using var doc        = JsonDocument.Parse(raw, new JsonDocumentOptions { });
+            var root             = doc.RootElement;
+            var respCode         = GetStr(root, "responseCode", "RESPONSECODE");
+            var respMsg          = GetStr(root, "responseMsg",  "RESPONSEMSG",  "errorMsg", "ERRORMSG") ?? "Bilinmeyen hata";
+            var sessionToken     = GetStr(root, "sessionToken", "SESSIONTOKEN");
 
             if (respCode != "00" || string.IsNullOrEmpty(sessionToken))
             {
@@ -340,9 +338,9 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             return new ParatikaPaymentResponseDto
             {
-                Success = true,
-                PaymentUrl = paymentUrl,
-                SessionToken = sessionToken,
+                Success           = true,
+                PaymentUrl        = paymentUrl,
+                SessionToken      = sessionToken,
                 MerchantPaymentId = merchantPayId
             };
         }
@@ -363,29 +361,17 @@ public class ParatikaPaymentService : IParatikaPaymentService
     {
         try
         {
-            _logger.LogInformation("🔔 Callback parametreleri | MerchantPayId={Id} | CustomerId={Cid} | SessionToken={St} | ResponseCode={Rc} | Random={Rnd} | SdSha512={Hash}",
-    callback.MerchantPaymentId,
-    callback.CustomerId,
-    callback.SessionToken,
-    callback.ResponseCode,
-    callback.Random,
-    callback.SdSha512);
+            _logger.LogInformation(
+                "🔔 Paratika Callback | PayId={Id} | Code={Code} | CardToken={Token}",
+                callback.MerchantPaymentId, callback.ResponseCode,
+                string.IsNullOrEmpty(callback.CardToken) ? "YOK" : "VAR");
 
-            // Hash doğrulama
-            // TODO: Formül doğrulandıktan sonra PARATIKA_HASH_STRICT=true yaparak strict moda geç
-            if (!string.IsNullOrEmpty(_merchantSecretKey))
+            // Hash doğrulama (opsiyonel ama önerilir)
+            if (!string.IsNullOrEmpty(_merchantSecretKey) && !VerifyCallbackHash(callback))
             {
-                var hashOk = VerifyCallbackHash(callback);
-                var strictMode = (Environment.GetEnvironmentVariable("PARATIKA_HASH_STRICT") ?? "false")
-                                    .Equals("true", StringComparison.OrdinalIgnoreCase);
-                if (!hashOk)
-                {
-                    _logger.LogWarning("⚠️ Paratika hash doğrulaması başarısız | PayId={Id} | StrictMode={Strict}",
-                        callback.MerchantPaymentId, strictMode);
-                    if (strictMode)
-                        return new ParatikaCallbackResult { Success = false, ErrorMessage = "Hash doğrulaması başarısız" };
-                    // StrictMode=false → logla ama devam et (debug aşaması)
-                }
+                _logger.LogWarning("⚠️ Paratika callback hash doğrulaması başarısız | PayId={Id}", callback.MerchantPaymentId);
+                // Hash yanlışsa işlemi reddet
+                return new ParatikaCallbackResult { Success = false, ErrorMessage = "Hash doğrulaması başarısız" };
             }
 
             if (callback.ResponseCode != "00")
@@ -399,8 +385,30 @@ public class ParatikaPaymentService : IParatikaPaymentService
             var customData = ParseCustomData(callback.CustomData);
             if (customData == null)
             {
-                _logger.LogError("❌ CustomData parse edilemedi | PayId={Id}", callback.MerchantPaymentId);
-                return new ParatikaCallbackResult { Success = false, ErrorMessage = "CustomData parse hatası" };
+                // Paratika CUSTOMDATA'yı geri göndermeyebilir — fallback: MerchantPaymentId'den UserId çıkar
+                _logger.LogWarning("⚠️ CustomData boş, MerchantPaymentId'den UserId çıkarılıyor | PayId={Id}", callback.MerchantPaymentId);
+                var fallbackUserId = ExtractUserIdFromPaymentId(callback.MerchantPaymentId);
+                if (fallbackUserId == 0)
+                {
+                    _logger.LogError("❌ CustomData ve MerchantPaymentId'den UserId alınamadı | PayId={Id}", callback.MerchantPaymentId);
+                    return new ParatikaCallbackResult { Success = false, ErrorMessage = "CustomData parse hatası" };
+                }
+                // Tutara göre paket tahmin et
+                var fallbackAmount = ParseAmount(callback.Amount);
+                var fallbackProductCode = GuessProductCodeFromAmount(fallbackAmount);
+                customData = new ParatikaCustomData
+                {
+                    UserId          = fallbackUserId.ToString(),
+                    ProductCode     = fallbackProductCode,
+                    Credits         = 0,   // FindPackage'dan doldurulacak
+                    IsCredit        = false,
+                    IsYearly        = false,
+                    DurationDays    = 30,
+                    DiscountPercent = 0,
+                    OriginalPrice   = fallbackAmount,
+                    DiscountedPrice = fallbackAmount
+                };
+                _logger.LogInformation("✅ Fallback customData oluşturuldu | UserId={Uid} | ProductCode={Pc}", fallbackUserId, fallbackProductCode);
             }
 
             // Duplicate kontrolü
@@ -468,8 +476,8 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             return new ParatikaCallbackResult
             {
-                Success = true,
-                IsSubscription = isSubscription,
+                Success           = true,
+                IsSubscription    = isSubscription,
                 MerchantPaymentId = callback.MerchantPaymentId
             };
         }
@@ -509,23 +517,23 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 _logger.LogWarning("❌ Recurring çekim başarısız | PlanCode={Plan} | Code={Code} | Err={Err}",
                     notification.PlanCode, notification.ResponseCode, notification.Error);
 
-                subscription.Status = "FAILED";
+                subscription.Status    = "FAILED";
                 subscription.UpdatedAt = DateTime.UtcNow;
                 await _dbContext.SaveChangesAsync();
 
                 // Başarısız ödeme kaydı
                 _dbContext.PaymentHistories.Add(new PaymentHistory
                 {
-                    UserId = subscription.UserId,
-                    OrderId = notification.MerchantPaymentId ?? $"REC-{notification.PlanCode}-{DateTime.UtcNow:yyyyMMdd}",
+                    UserId        = subscription.UserId,
+                    OrderId       = notification.MerchantPaymentId ?? $"REC-{notification.PlanCode}-{DateTime.UtcNow:yyyyMMdd}",
                     TransactionId = notification.PgTranId ?? "",
-                    Amount = ParseAmount(notification.Amount),
-                    Currency = "TRY",
-                    ProductCode = "",
-                    PackageName = subscription.PackageName,
-                    Status = "FAILED",
-                    PaymentDate = DateTime.UtcNow,
-                    ErrorMessage = $"Recurring başarısız | Code:{notification.ResponseCode} | {notification.Error}"
+                    Amount        = ParseAmount(notification.Amount),
+                    Currency      = "TRY",
+                    ProductCode   = "",
+                    PackageName   = subscription.PackageName,
+                    Status        = "FAILED",
+                    PaymentDate   = DateTime.UtcNow,
+                    ErrorMessage  = $"Recurring başarısız | Code:{notification.ResponseCode} | {notification.Error}"
                 });
                 await _dbContext.SaveChangesAsync();
                 return;
@@ -558,25 +566,25 @@ public class ParatikaPaymentService : IParatikaPaymentService
             _dbContext.Users.Update(user);
 
             // Abonelik kaydını güncelle
-            subscription.Status = "ACTIVE";
+            subscription.Status          = "ACTIVE";
             subscription.NextBillingDate = now.AddDays(package.DurationDays);
-            subscription.UpdatedAt = now;
+            subscription.UpdatedAt       = now;
 
             // Başarılı ödeme kaydı
             var orderId = notification.MerchantPaymentId ?? $"REC-{notification.PlanCode}-{now:yyyyMMdd}";
             _dbContext.PaymentHistories.Add(new PaymentHistory
             {
-                UserId = subscription.UserId,
-                OrderId = orderId,
+                UserId        = subscription.UserId,
+                OrderId       = orderId,
                 TransactionId = notification.PgTranId ?? "",
-                ProductCode = package.ProductCode,
-                PackageName = package.Name,
-                Amount = ParseAmount(notification.Amount),
-                Currency = "TRY",
-                CreditsAdded = package.Credits,
-                Status = "SUCCESS",
-                PaymentDate = now,
-                CardLastFour = notification.CardPanMasked?.Length >= 4 ? notification.CardPanMasked[^4..] : null
+                ProductCode   = package.ProductCode,
+                PackageName   = package.Name,
+                Amount        = ParseAmount(notification.Amount),
+                Currency      = "TRY",
+                CreditsAdded  = package.Credits,
+                Status        = "SUCCESS",
+                PaymentDate   = now,
+                CardLastFour  = notification.CardPanMasked?.Length >= 4 ? notification.CardPanMasked[^4..] : null
             });
 
             await _dbContext.SaveChangesAsync();
@@ -613,10 +621,10 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 _logger.LogWarning("⚠️ Paratika'da kart silinemedi, yine de DB'de iptal ediliyor | PlanCode={Plan}", subscription.PlanCode);
 
             // DB güncelle
-            subscription.Status = "CANCELLED";
+            subscription.Status      = "CANCELLED";
             subscription.CancelledAt = DateTime.UtcNow;
             subscription.CancelReason = reason ?? "Kullanıcı tarafından iptal edildi";
-            subscription.UpdatedAt = DateTime.UtcNow;
+            subscription.UpdatedAt   = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync();
 
@@ -658,12 +666,12 @@ public class ParatikaPaymentService : IParatikaPaymentService
             var fakeCallback = new ParatikaCallbackDto
             {
                 MerchantPaymentId = merchantPaymentId,
-                ResponseCode = "00",
-                ResponseMsg = "Onaylı (Verified)",
-                PgTranId = query.PgTranId,
-                Amount = query.Amount,
-                InstallmentCount = query.InstallmentCount,
-                CardPanMasked = query.CardPanMasked,
+                ResponseCode      = "00",
+                ResponseMsg       = "Onaylı (Verified)",
+                PgTranId          = query.PgTranId,
+                Amount            = query.Amount,
+                InstallmentCount  = query.InstallmentCount,
+                CardPanMasked     = query.CardPanMasked,
                 // Not: verify senaryosunda cardToken gelmiyor, recurring kurulmayacak
                 // Kullanıcı bir sonraki girişte bilgilendirilmeli
             };
@@ -678,11 +686,11 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             return new PaymentVerificationResult
             {
-                Success = true,
+                Success            = true,
                 IsAlreadyProcessed = false,
-                CreditsAdded = payment?.CreditsAdded ?? 0,
-                PackageName = payment?.PackageName ?? "",
-                UserId = payment?.UserId ?? 0
+                CreditsAdded       = payment?.CreditsAdded ?? 0,
+                PackageName        = payment?.PackageName ?? "",
+                UserId             = payment?.UserId ?? 0
             };
         }
         catch (Exception ex)
@@ -704,7 +712,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
         ParatikaCallbackDto callback, ParatikaCustomData customData, decimal finalAmount)
     {
         var planCode = BuildPlanCode(userId, package.Alias);
-        var period = package.IsYearly ? "YEARLY" : "MONTHLY";
+        var period   = package.IsYearly ? "YEARLY" : "MONTHLY";
         var amountStr = finalAmount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
         // ── Adım 1: Plan oluştur ──────────────────────────────────────────────
@@ -712,26 +720,26 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
         var planForm = new Dictionary<string, string>
         {
-            ["ACTION"] = "ADDRECURRINGPLAN",
-            ["MERCHANTUSER"] = _merchantUser,
+            ["ACTION"]           = "ADDRECURRINGPLAN",
+            ["MERCHANTUSER"]     = _merchantUser,
             ["MERCHANTPASSWORD"] = _merchantPassword,
-            ["MERCHANT"] = _merchant,
-            ["PLANCODE"] = planCode,
-            ["DESCRIPTION"] = $"FGSTrade {package.NameTr} Aboneliği",
-            ["PERIOD"] = period,   // MONTHLY veya YEARLY
-            ["AMOUNT"] = amountStr,
-            ["CURRENCY"] = "TRY",
-            ["MAXPAYMENTCOUNT"] = "0",      // 0 = sonsuz (kullanıcı iptal edene kadar)
-            ["NOTIFICATIONURL"] = _recurringNotifUrl,
+            ["MERCHANT"]         = _merchant,
+            ["PLANCODE"]         = planCode,
+            ["DESCRIPTION"]      = $"FGSTrade {package.NameTr} Aboneliği",
+            ["PERIOD"]           = period,   // MONTHLY veya YEARLY
+            ["AMOUNT"]           = amountStr,
+            ["CURRENCY"]         = "TRY",
+            ["MAXPAYMENTCOUNT"]  = "0",      // 0 = sonsuz (kullanıcı iptal edene kadar)
+            ["NOTIFICATIONURL"]  = _recurringNotifUrl,
         };
 
         var planResp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(planForm));
-        var planRaw = await planResp.Content.ReadAsStringAsync();
+        var planRaw  = await planResp.Content.ReadAsStringAsync();
         _logger.LogInformation("◀ ADDRECURRINGPLAN yanıt | {Body}", planRaw.Length > 300 ? planRaw[..300] : planRaw);
 
-        using var planDoc = JsonDocument.Parse(planRaw);
-        var planRoot = planDoc.RootElement;
-        var planCode_resp = GetStr(planRoot, "RESPONSECODE");
+        using var planDoc  = JsonDocument.Parse(planRaw);
+        var planRoot       = planDoc.RootElement;
+        var planCode_resp  = GetStr(planRoot, "RESPONSECODE");
 
         if (planCode_resp != "00")
         {
@@ -749,25 +757,25 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
         var cardForm = new Dictionary<string, string>
         {
-            ["ACTION"] = "ADDRECURRINGPLANCARD",
-            ["MERCHANTUSER"] = _merchantUser,
+            ["ACTION"]           = "ADDRECURRINGPLANCARD",
+            ["MERCHANTUSER"]     = _merchantUser,
             ["MERCHANTPASSWORD"] = _merchantPassword,
-            ["MERCHANT"] = _merchant,
-            ["PLANCODE"] = planCode,
-            ["CARDTOKEN"] = callback.CardToken!,
+            ["MERCHANT"]         = _merchant,
+            ["PLANCODE"]         = planCode,
+            ["CARDTOKEN"]        = callback.CardToken!,
             // İlk çekim zaten yapıldı (callback = ilk ödeme), bir sonraki çekim period sonra
             // STARTDATE boş bırakılırsa Paratika bugünden itibaren sayar
             // Biz bir period sonrasını veriyoruz:
-            ["STARTDATE"] = GetNextBillingDate(package).ToString("yyyy-MM-dd"),
+            ["STARTDATE"]        = GetNextBillingDate(package).ToString("yyyy-MM-dd"),
         };
 
         var cardResp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(cardForm));
-        var cardRaw = await cardResp.Content.ReadAsStringAsync();
+        var cardRaw  = await cardResp.Content.ReadAsStringAsync();
         _logger.LogInformation("◀ ADDRECURRINGPLANCARD yanıt | {Body}", cardRaw.Length > 300 ? cardRaw[..300] : cardRaw);
 
-        using var cardDoc = JsonDocument.Parse(cardRaw);
-        var cardRoot = cardDoc.RootElement;
-        var cardCode_resp = GetStr(cardRoot, "RESPONSECODE");
+        using var cardDoc  = JsonDocument.Parse(cardRaw);
+        var cardRoot       = cardDoc.RootElement;
+        var cardCode_resp  = GetStr(cardRoot, "RESPONSECODE");
 
         if (cardCode_resp != "00")
         {
@@ -781,19 +789,19 @@ public class ParatikaPaymentService : IParatikaPaymentService
         var nextBilling = GetNextBillingDate(package);
         var subscription = new Subscription
         {
-            UserId = userId,
-            PlanCode = planCode,
-            PackageAlias = package.Alias,
-            PackageName = package.Name,
-            Amount = finalAmount,
-            Period = period,
-            Status = "ACTIVE",
-            StartDate = DateTime.UtcNow,
+            UserId          = userId,
+            PlanCode        = planCode,
+            PackageAlias    = package.Alias,
+            PackageName     = package.Name,
+            Amount          = finalAmount,
+            Period          = period,
+            Status          = "ACTIVE",
+            StartDate       = DateTime.UtcNow,
             NextBillingDate = nextBilling,
-            CardToken = callback.CardToken,
-            CardLastFour = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
-            CardBrand = callback.CardBrand,
-            DiscountCode = customData.DiscountCode,
+            CardToken       = callback.CardToken,
+            CardLastFour    = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
+            CardBrand       = callback.CardBrand,
+            DiscountCode    = customData.DiscountCode,
         };
 
         _dbContext.Subscriptions.Add(subscription);
@@ -812,16 +820,16 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             var form = new Dictionary<string, string>
             {
-                ["ACTION"] = "DELETERECURRINGPLANCARD",
-                ["MERCHANTUSER"] = _merchantUser,
+                ["ACTION"]           = "DELETERECURRINGPLANCARD",
+                ["MERCHANTUSER"]     = _merchantUser,
                 ["MERCHANTPASSWORD"] = _merchantPassword,
-                ["MERCHANT"] = _merchant,
-                ["PLANCODE"] = planCode,
-                ["CARDTOKEN"] = cardToken,
+                ["MERCHANT"]         = _merchant,
+                ["PLANCODE"]         = planCode,
+                ["CARDTOKEN"]        = cardToken,
             };
 
             var resp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(form));
-            var raw = await resp.Content.ReadAsStringAsync();
+            var raw  = await resp.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(raw);
             var code = GetStr(doc.RootElement, "RESPONSECODE");
 
@@ -849,13 +857,13 @@ public class ParatikaPaymentService : IParatikaPaymentService
         }
         else
         {
-            user.PackageType = package.Name;
-            user.MembershipStart = now;
+            user.PackageType      = package.Name;
+            user.MembershipStart  = now;
             // Mevcut üyelik bitmemişse üstüne ekle
             var baseDate = user.MembershipEnd.HasValue && user.MembershipEnd.Value > now
                 ? user.MembershipEnd.Value : now;
             user.MembershipEnd = DateTime.SpecifyKind(baseDate.AddDays(package.DurationDays), DateTimeKind.Utc);
-            user.Credits += package.Credits;
+            user.Credits      += package.Credits;
             user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
             _logger.LogInformation(
@@ -873,21 +881,21 @@ public class ParatikaPaymentService : IParatikaPaymentService
     {
         _dbContext.PaymentHistories.Add(new PaymentHistory
         {
-            UserId = userId,
-            OrderId = callback.MerchantPaymentId ?? "",
-            TransactionId = callback.PgTranId ?? "",
-            ProductCode = package.ProductCode,
-            PackageName = package.Name,
-            Amount = finalAmount,
-            Currency = "TRY",
-            CreditsAdded = package.Credits,
-            Status = "SUCCESS",
-            PaymentDate = DateTime.UtcNow,
-            Installment = int.TryParse(callback.InstallmentCount, out int inst) ? inst : 1,
-            CardLastFour = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
-            DiscountCode = customData.DiscountCode,
+            UserId             = userId,
+            OrderId            = callback.MerchantPaymentId ?? "",
+            TransactionId      = callback.PgTranId ?? "",
+            ProductCode        = package.ProductCode,
+            PackageName        = package.Name,
+            Amount             = finalAmount,
+            Currency           = "TRY",
+            CreditsAdded       = package.Credits,
+            Status             = "SUCCESS",
+            PaymentDate        = DateTime.UtcNow,
+            Installment        = int.TryParse(callback.InstallmentCount, out int inst) ? inst : 1,
+            CardLastFour       = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
+            DiscountCode       = customData.DiscountCode,
             DiscountPercentage = customData.DiscountPercent > 0 ? (int)customData.DiscountPercent : null,
-            FinalAmount = finalAmount
+            FinalAmount        = finalAmount
         });
         await _dbContext.SaveChangesAsync();
     }
@@ -904,16 +912,16 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
         _dbContext.Subscriptions.Add(new Subscription
         {
-            UserId = userId,
-            PlanCode = BuildPlanCode(userId, package.Alias),
+            UserId       = userId,
+            PlanCode     = BuildPlanCode(userId, package.Alias),
             PackageAlias = package.Alias,
-            PackageName = package.Name,
-            Amount = customData.DiscountedPrice > 0 ? customData.DiscountedPrice : package.PriceTry,
-            Period = package.IsYearly ? "YEARLY" : "MONTHLY",
-            Status = "ACTIVE",
-            StartDate = DateTime.UtcNow,
+            PackageName  = package.Name,
+            Amount       = customData.DiscountedPrice > 0 ? customData.DiscountedPrice : package.PriceTry,
+            Period       = package.IsYearly ? "YEARLY" : "MONTHLY",
+            Status       = "ACTIVE",
+            StartDate    = DateTime.UtcNow,
             NextBillingDate = GetNextBillingDate(package),
-            CardToken = null, // Kart yok — otomatik yenileme olmayacak
+            CardToken    = null, // Kart yok — otomatik yenileme olmayacak
             CardLastFour = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
             DiscountCode = customData.DiscountCode,
         });
@@ -931,14 +939,14 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             _dbContext.PaymentHistories.Add(new PaymentHistory
             {
-                UserId = uid,
-                OrderId = callback.MerchantPaymentId ?? "",
+                UserId        = uid,
+                OrderId       = callback.MerchantPaymentId ?? "",
                 TransactionId = callback.PgTranId ?? "",
-                Amount = ParseAmount(callback.Amount),
-                Currency = "TRY",
-                Status = "FAILED",
-                PaymentDate = DateTime.UtcNow,
-                ErrorMessage = $"Code:{callback.ResponseCode} | {callback.ErrorMsg}"
+                Amount        = ParseAmount(callback.Amount),
+                Currency      = "TRY",
+                Status        = "FAILED",
+                PaymentDate   = DateTime.UtcNow,
+                ErrorMessage  = $"Code:{callback.ResponseCode} | {callback.ErrorMsg}"
             });
             await _dbContext.SaveChangesAsync();
         }
@@ -964,15 +972,15 @@ public class ParatikaPaymentService : IParatikaPaymentService
         {
             var form = new Dictionary<string, string>
             {
-                ["ACTION"] = "QUERYTRANSACTION",
-                ["MERCHANTUSER"] = _merchantUser,
-                ["MERCHANTPASSWORD"] = _merchantPassword,
-                ["MERCHANT"] = _merchant,
+                ["ACTION"]            = "QUERYTRANSACTION",
+                ["MERCHANTUSER"]      = _merchantUser,
+                ["MERCHANTPASSWORD"]  = _merchantPassword,
+                ["MERCHANT"]          = _merchant,
                 ["MERCHANTPAYMENTID"] = merchantPaymentId,
             };
 
             var resp = await _httpClient.PostAsync(_apiBaseUrl, new FormUrlEncodedContent(form));
-            var raw = await resp.Content.ReadAsStringAsync();
+            var raw  = await resp.Content.ReadAsStringAsync();
 
             _logger.LogInformation("QUERYTRANSACTION | PayId={Id} | Response={Body}", merchantPaymentId, raw.Length > 300 ? raw[..300] : raw);
 
@@ -983,16 +991,16 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             return new ParatikaQueryResponseDto
             {
-                ResponseCode = GetStr(root, "RESPONSECODE"),
-                ResponseMsg = GetStr(root, "RESPONSEMSG"),
-                PgTranId = GetStr(root, "PGTRANID"),
-                PgTranApprCode = GetStr(root, "PGTRANREFID"),
-                Amount = GetStr(root, "AMOUNT"),
-                InstallmentCount = GetStr(root, "INSTALLMENTCOUNT"),
+                ResponseCode      = GetStr(root, "RESPONSECODE"),
+                ResponseMsg       = GetStr(root, "RESPONSEMSG"),
+                PgTranId          = GetStr(root, "PGTRANID"),
+                PgTranApprCode    = GetStr(root, "PGTRANREFID"),
+                Amount            = GetStr(root, "AMOUNT"),
+                InstallmentCount  = GetStr(root, "INSTALLMENTCOUNT"),
                 MerchantPaymentId = GetStr(root, "MERCHANTPAYMENTID"),
-                CardPanMasked = GetStr(root, "CARDPANMASKED"),
-                ErrorCode = GetStr(root, "ERRORCODE"),
-                Error = GetStr(root, "ERROR"),
+                CardPanMasked     = GetStr(root, "CARDPANMASKED"),
+                ErrorCode         = GetStr(root, "ERRORCODE"),
+                Error             = GetStr(root, "ERROR"),
             };
         }
         catch (Exception ex)
@@ -1006,39 +1014,12 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
     private bool VerifyCallbackHash(ParatikaCallbackDto cb)
     {
-        // sdSha512 = SHA512( merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey )
-        if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random))
-        {
-            _logger.LogWarning("⚠️ Hash doğrulama atlandı — sdSha512 veya random boş | PayId={Id}", cb.MerchantPaymentId);
-            return true;
-        }
-
-        var merchantPaymentId = cb.MerchantPaymentId ?? "";
-        var customerId        = cb.CustomerId        ?? "";
-        var sessionToken      = cb.SessionToken      ?? "";
-        var responseCode      = cb.ResponseCode      ?? "";
-        var random            = cb.Random            ?? "";
-
-        var raw      = $"{merchantPaymentId}|{customerId}|{sessionToken}|{responseCode}|{random}|{_merchantSecretKey}";
+        // sdSha512 = SHA512(hex(merchantPaymentId|customerId|sessionToken|responseCode|random|secretKey))
+        if (string.IsNullOrEmpty(cb.SdSha512) || string.IsNullOrEmpty(cb.Random)) return true; // doğrulama parametresi yoksa geç
+        var raw = $"{cb.MerchantPaymentId}|{cb.CustomerId}|{cb.SessionToken}|{cb.ResponseCode}|{cb.Random}|{_merchantSecretKey}";
         using var sha = SHA512.Create();
-        var computed = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
-        var received = cb.SdSha512.ToLowerInvariant();
-        var isValid  = computed == received;
-
-        // Debug loglama — formül doğrulanınca kaldırılabilir
-        _logger.LogInformation(
-            "🔐 Hash Debug | PayId={PayId} | CustomerId={Cid} | SessionToken={St} | ResponseCode={Rc} | Random={Rnd} | SecretKey(len)={Skl} | Computed={Comp} | Received={Recv} | Match={Ok}",
-            merchantPaymentId,
-            customerId,
-            sessionToken.Length > 10 ? sessionToken[..10] + "…" : sessionToken,
-            responseCode,
-            random,
-            _merchantSecretKey.Length,
-            computed[..16] + "…",
-            received[..16] + "…",
-            isValid);
-
-        return isValid;
+        var hash = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).ToLowerInvariant();
+        return hash == cb.SdSha512?.ToLowerInvariant();
     }
 
     private static string BuildPlanCode(int userId, string packageAlias)
@@ -1069,6 +1050,17 @@ public class ParatikaPaymentService : IParatikaPaymentService
         if (string.IsNullOrWhiteSpace(json)) return null;
         try { return JsonSerializer.Deserialize<ParatikaCustomData>(json); }
         catch { return null; }
+    }
+
+    private string GuessProductCodeFromAmount(decimal amountTL)
+    {
+        var package = _packages.OrderBy(p => Math.Abs(p.PriceTry - amountTL)).FirstOrDefault();
+        if (package != null)
+        {
+            _logger.LogInformation("💡 Amount'dan paket tahmini | {Amt} TL → {Pkg}", amountTL, package.Name);
+            return package.ProductCode;
+        }
+        return "1274715"; // Starter Monthly fallback
     }
 
     private FgsTradePackage? FindPackage(string code)
