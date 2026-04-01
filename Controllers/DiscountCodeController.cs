@@ -104,8 +104,8 @@ public class DiscountCodeController : ControllerBase
             }
 
             // Paketi bul ve fiyatını al
-            var toslaService = HttpContext.RequestServices.GetRequiredService<IToslaPaymentService>();
-            var packages = toslaService.GetAvailablePackages();
+            var paratikaService = HttpContext.RequestServices.GetRequiredService<IParatikaPaymentService>();
+            var packages = paratikaService.GetAvailablePackages();
             var package = packages.FirstOrDefault(p => 
                 p.ProductCode == request.PackageCode || 
                 p.Alias.Equals(request.PackageCode, StringComparison.OrdinalIgnoreCase));

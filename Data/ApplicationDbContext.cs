@@ -65,7 +65,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Phone).HasColumnName("Phone").HasMaxLength(20);
             entity.Property(e => e.Website).HasColumnName("Website").HasMaxLength(255);
             entity.Property(e => e.UserType).HasColumnName("UserType");
-            entity.Property(e => e.Credits).HasColumnName("Credits").HasDefaultValue(5);
+            entity.Property(e => e.Credits).HasColumnName("Credits").HasDefaultValue(0);
             entity.Property(e => e.PackageType).HasColumnName("PackageType").HasMaxLength(50).HasDefaultValue("Free");
             entity.Property(e => e.Role).HasColumnName("Role").HasMaxLength(20).HasDefaultValue("User");
             entity.Property(e => e.IsActive).HasColumnName("IsActive").HasDefaultValue(true);

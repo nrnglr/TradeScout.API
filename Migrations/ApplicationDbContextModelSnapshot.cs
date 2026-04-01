@@ -703,7 +703,7 @@ namespace TradeScout.API.Migrations
                     b.Property<int>("Credits")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasDefaultValue(5)
+                        .HasDefaultValue(0)
                         .HasColumnName("Credits");
 
                     b.Property<string>("Email")

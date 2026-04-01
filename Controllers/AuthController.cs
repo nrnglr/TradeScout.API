@@ -103,7 +103,7 @@ public class AuthController : ControllerBase
                 Phone = registerDto.Phone,
                 Website = registerDto.Website,
                 UserType = registerDto.UserType,
-                Credits = 2,
+                Credits = 0,
                 MaxResultsPerSearch = 20, // Free kullanıcılar için varsayılan limit
                 PackageType = "Free",
                 Role = "User",

@@ -62,7 +62,7 @@ public class User
 
     [Required]
     [Column("Credits")]
-    public int Credits { get; set; } = 5;
+    public int Credits { get; set; } = 0;
 
     [Required]
     [Column("MaxResultsPerSearch")]

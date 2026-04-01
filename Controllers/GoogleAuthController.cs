@@ -52,7 +52,7 @@ namespace TradeScout.API.Controllers
                     {
                         FullName = googleUser.Name ?? "Google User",
                         Email = googleUser.Email,
-                        Credits = 10,
+                        Credits = 0,
                         Role = "User",
                         PackageType = "Free",
                         CreatedAt = DateTime.UtcNow,
