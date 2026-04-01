@@ -236,6 +236,16 @@ public class TradeIntelligenceController : ControllerBase
             return StatusCode(500, new { message = "İşlem sırasında bir hata oluştu." });
         }
     }
+    [HttpGet("free-trial-days-left")]
+public IActionResult GetFreeTrialDaysLeft()
+{
+    var userId = GetCurrentUserId();
+    if (userId == null)
+        return Unauthorized(new { message = "Kullanıcı girişi gereklidir." });
+
+    var daysLeft = _tradeIntelligenceService.GetFreeTrialDaysLeft(userId.Value);
+    return Ok(new { daysLeft });
+}
 
     /// <summary>
     /// Markdown içeriğini PDF'e dönüştür

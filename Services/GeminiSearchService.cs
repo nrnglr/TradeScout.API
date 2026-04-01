@@ -213,15 +213,16 @@ public class GeminiSearchService : IGeminiSearchService
 
             var location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
             
-            // 50'den fazla ise paralel istekler yap
             int batchSize = 50;
             int batchCount = (int)Math.Ceiling((double)maxResults / batchSize);
-            batchCount = Math.Min(batchCount, 5); // Max 5 paralel istek
             
-            _logger.LogInformation("📦 {BatchCount} paralel istek yapılacak (batch size: {BatchSize})", 
+            // Eğer 6 anahtarımız varsa 6 paralel batch atabiliriz
+            batchCount = Math.Min(batchCount, _apiKeys.Count > 0 ? _apiKeys.Count * 2 : 5); 
+            
+            _logger.LogInformation("🚀 {BatchCount} PARALEL istek yapılacak (batch size: {BatchSize})", 
                 batchCount, batchSize);
             
-            var resultList = new List<List<BusinessDto>>();
+            var searchTasks = new List<Task<List<BusinessDto>>>();
             
             for (int i = 0; i < batchCount; i++)
             {
@@ -229,21 +230,15 @@ public class GeminiSearchService : IGeminiSearchService
                 int targetCount = Math.Min(batchSize, maxResults - offset);
                 var prompt = BuildSearchPromptWithOffset(sector, location, targetCount, offset, i);
                 
-                var batchResult = await CallGeminiApiAsync(prompt, sector, city, country, i, cancellationToken);
-                resultList.Add(batchResult);
-                
-                // Batch'ler arasında bekleme - rate limit aşımını önler
-                if (i < batchCount - 1)
-                {
-                    _logger.LogInformation("⏳ Batch #{BatchIndex} tamamlandı, sonraki batch için 4 saniye bekleniyor...", i);
-                    await Task.Delay(4000, cancellationToken);
-                }
+                // Bekleme (await) yok! Bütün task'leri aynı anda listeye ekleyip fırlatıyoruz
+                searchTasks.Add(CallGeminiApiAsync(prompt, sector, city, country, i, cancellationToken));
             }
             
-            var results = resultList.ToArray();
+            // Bütün paralel isteklerin aynı anda bitmesini bekle
+            var resultsArray = await Task.WhenAll(searchTasks);
             
             // Sonuçları birleştir ve duplicate'leri kaldır
-            var allBusinesses = results
+            var allBusinesses = resultsArray
                 .SelectMany(x => x)
                 .GroupBy(b => b.BusinessName?.ToLower()?.Trim())
                 .Where(g => !string.IsNullOrEmpty(g.Key))
@@ -261,7 +256,6 @@ public class GeminiSearchService : IGeminiSearchService
             throw;
         }
     }
-
     /// <summary>
     /// Tek bir Gemini API çağrısı yapar
     /// </summary>
@@ -599,8 +593,6 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
         int batchSize = 60,
         CancellationToken cancellationToken = default)
     {
-        // IGNORE the incoming cancellationToken - we manage our own process
-        
         if (businesses == null || !businesses.Any())
         {
             return (new List<BusinessDto>(), 0);
@@ -613,6 +605,8 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
         _logger.LogInformation("🚀 Enrichment başlatılıyor: {TotalCount} firma, {BatchCount} batch ({BatchSize}'lik)", 
             businesses.Count, totalBatches, batchSize);
 
+        var enrichmentTasks = new List<Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)>>();
+
         for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
             var batch = businesses
@@ -620,32 +614,21 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
                 .Take(batchSize)
                 .ToList();
 
-            _logger.LogInformation("📦 Batch {Current}/{Total} işleniyor ({Count} firma)...", 
+            _logger.LogInformation("📦 Batch {Current}/{Total} PARALEL olarak kuyruğa eklendi ({Count} firma)...", 
                 batchIndex + 1, totalBatches, batch.Count);
 
-            try
-            {
-                var (enrichedBatch, batchSuccessCount) = await EnrichBatchAsync(batch);
-                allResults.AddRange(enrichedBatch);
-                successfulCount += batchSuccessCount;
+            // Güvenli wrapper fonksiyon ile task'ı ekle
+            enrichmentTasks.Add(SafeEnrichBatchAsync(batch, batchIndex + 1, totalBatches));
+        }
 
-                _logger.LogInformation("✅ Batch {Current}/{Total} tamamlandı: {SuccessCount} başarılı", 
-                    batchIndex + 1, totalBatches, batchSuccessCount);
+        // Tüm zenginleştirme işlemlerini AYNI ANDA çalıştır
+        var enrichmentResults = await Task.WhenAll(enrichmentTasks);
 
-                // Small delay between batches to avoid rate limiting
-                if (batchIndex < totalBatches - 1)
-                {
-                    await Task.Delay(5000);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "⚠️ Batch {Current}/{Total} başarısız. Original data kullanılıyor.", 
-                    batchIndex + 1, totalBatches);
-                
-                // Add original batch data on failure
-                allResults.AddRange(batch);
-            }
+        // Biten tüm sonuçları ana listeye ekle
+        foreach (var (enrichedBatch, batchSuccessCount) in enrichmentResults)
+        {
+            allResults.AddRange(enrichedBatch);
+            successfulCount += batchSuccessCount;
         }
 
         _logger.LogInformation("🎉 Enrichment tamamlandı: {TotalCount} firma, {SuccessCount} başarılı", 
@@ -654,6 +637,23 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
         return (allResults, successfulCount);
     }
 
+    /// <summary>
+    /// Paralel çalışırken hataları yakalayan güvenli metod
+    /// </summary>
+    private async Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)> SafeEnrichBatchAsync(List<BusinessDto> batch, int currentBatch, int totalBatches)
+    {
+        try
+        {
+            var result = await EnrichBatchAsync(batch);
+            _logger.LogInformation("✅ Batch {Current}/{Total} tamamlandı: {SuccessCount} başarılı", currentBatch, totalBatches, result.SuccessCount);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ Batch {Current}/{Total} başarısız. Original data kullanılıyor.", currentBatch, totalBatches);
+            return (batch, 0); // Çökmesini engelle, boş verilerle devam et
+        }
+    }
     /// <summary>
     /// Process a single batch of businesses for enrichment
     /// </summary>

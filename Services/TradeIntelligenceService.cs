@@ -46,6 +46,11 @@ public interface ITradeIntelligenceService
     /// Kullanıcının 30 günlük ücretsiz deneme süresinde olup olmadığını kontrol et
     /// </summary>
     bool IsInFreeTrial(int userId);
+
+    /// <summary>
+    /// Kullanıcının kalan ücretsiz deneme gününü getirir
+    /// </summary>
+    int GetFreeTrialDaysLeft(int userId);
 }
 
 /// <summary>
@@ -85,6 +90,28 @@ public class TradeIntelligenceService : ITradeIntelligenceService
             _logger.LogInformation("✅ Trade Intelligence Service initialized with {Count} API key(s)", _apiKeys.Count);
         }
     }
+    public int GetFreeTrialDaysLeft(int userId)
+{
+    try
+    {
+        var user = _dbContext.Users.Find(userId);
+        if (user == null) return 0;
+
+        // Eğer CreatedAt atanmadıysa, 30 gün ver
+        if (user.CreatedAt.Year < 2020)
+        {
+            return 30;
+        }
+
+        var daysSinceRegistration = (DateTime.UtcNow - user.CreatedAt).TotalDays;
+        var daysLeft = 30 - (int)daysSinceRegistration;
+        return daysLeft > 0 ? daysLeft : 0;
+    }
+    catch
+    {
+        return 0;
+    }
+}
 
     private List<string> LoadApiKeys(IConfiguration configuration)
     {
