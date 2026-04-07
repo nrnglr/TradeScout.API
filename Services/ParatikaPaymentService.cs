@@ -915,24 +915,48 @@ public class ParatikaPaymentService : IParatikaPaymentService
         ParatikaCallbackDto callback, FgsTradePackage package,
         int userId, ParatikaCustomData customData, decimal finalAmount)
     {
-        _dbContext.PaymentHistories.Add(new PaymentHistory
+        // Önce PENDING kaydı var mı kontrol et — varsa güncelle, yoksa ekle
+        var existingHistory = await _dbContext.PaymentHistories
+            .FirstOrDefaultAsync(p => p.OrderId == (callback.MerchantPaymentId ?? ""));
+        
+        if (existingHistory != null)
         {
-            UserId             = userId,
-            OrderId            = callback.MerchantPaymentId ?? "",
-            TransactionId      = callback.PgTranId ?? "",
-            ProductCode        = package.ProductCode,
-            PackageName        = package.Name,
-            Amount             = finalAmount,
-            Currency           = "TRY",
-            CreditsAdded       = package.Credits,
-            Status             = "SUCCESS",
-            PaymentDate        = DateTime.UtcNow,
-            Installment        = int.TryParse(callback.InstallmentCount, out int inst) ? inst : 1,
-            CardLastFour       = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
-            DiscountCode       = customData.DiscountCode,
-            DiscountPercentage = customData.DiscountPercent > 0 ? (int)customData.DiscountPercent : null,
-            FinalAmount        = finalAmount
-        });
+            // PENDING kaydını SUCCESS'e güncelle
+            existingHistory.TransactionId      = callback.PgTranId ?? "";
+            existingHistory.ProductCode        = package.ProductCode;
+            existingHistory.PackageName        = package.Name;
+            existingHistory.Amount             = finalAmount;
+            existingHistory.Currency           = "TRY";
+            existingHistory.CreditsAdded       = package.Credits;
+            existingHistory.Status             = "SUCCESS";
+            existingHistory.PaymentDate        = DateTime.UtcNow;
+            existingHistory.Installment        = int.TryParse(callback.InstallmentCount, out int inst) ? inst : 1;
+            existingHistory.CardLastFour       = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null;
+            existingHistory.DiscountCode       = customData.DiscountCode;
+            existingHistory.DiscountPercentage = customData.DiscountPercent > 0 ? (int)customData.DiscountPercent : null;
+            existingHistory.FinalAmount        = finalAmount;
+        }
+        else
+        {
+            _dbContext.PaymentHistories.Add(new PaymentHistory
+            {
+                UserId             = userId,
+                OrderId            = callback.MerchantPaymentId ?? "",
+                TransactionId      = callback.PgTranId ?? "",
+                ProductCode        = package.ProductCode,
+                PackageName        = package.Name,
+                Amount             = finalAmount,
+                Currency           = "TRY",
+                CreditsAdded       = package.Credits,
+                Status             = "SUCCESS",
+                PaymentDate        = DateTime.UtcNow,
+                Installment        = int.TryParse(callback.InstallmentCount, out int inst2) ? inst2 : 1,
+                CardLastFour       = callback.CardPanMasked?.Length >= 4 ? callback.CardPanMasked[^4..] : null,
+                DiscountCode       = customData.DiscountCode,
+                DiscountPercentage = customData.DiscountPercent > 0 ? (int)customData.DiscountPercent : null,
+                FinalAmount        = finalAmount
+            });
+        }
         await _dbContext.SaveChangesAsync();
     }
 
