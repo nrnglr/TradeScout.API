@@ -338,6 +338,24 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             _logger.LogInformation("✅ Paratika SessionToken hazır | Token={Token} | Url={Url}", sessionToken, paymentUrl);
 
+            // Pending kayıt — callback'te paketi bulmak için DB'ye yaz
+            var existingPending = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == merchantPayId);
+            if (existingPending == null)
+            {
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId      = int.TryParse(request.UserId, out int pendingUid) ? pendingUid : 0,
+                    OrderId     = merchantPayId,
+                    ProductCode = package.ProductCode,
+                    PackageName = package.Name,
+                    Amount      = finalPrice,
+                    Status      = "PENDING",
+                });
+                await _dbContext.SaveChangesAsync();
+                _logger.LogInformation("💾 Pending kayıt oluşturuldu | PayId={Id} | Paket={Pkg}", merchantPayId, package.Name);
+            }
+
             return new ParatikaPaymentResponseDto
             {
                 Success           = true,
@@ -405,15 +423,32 @@ public class ParatikaPaymentService : IParatikaPaymentService
         
         if (customData == null)
         {
-            _logger.LogWarning("⚠️ CustomData boş, manuel veri kurtarma (Fallback) devrede | PayId={Id}", callback.MerchantPaymentId);
+            _logger.LogWarning("⚠️ CustomData boş, DB'den paket bilgisi okunuyor | PayId={Id}", callback.MerchantPaymentId);
             
-            // Sipariş numarasından (FGS...) UserId'yi çıkarıyoruz.
+            // UserId'yi sipariş numarasından çıkar
             var fallbackUserId = ExtractUserIdFromPaymentId(callback.MerchantPaymentId);
             if (fallbackUserId == 0) throw new Exception("UserId hiçbir şekilde tespit edilemedi.");
 
-            // Tutara bakıp hangi paketi aldığını tahmin ediyoruz.
-            var fallbackAmount = ParseAmount(callback.Amount);
-            var fallbackProductCode = GuessProductCodeFromAmount(fallbackAmount);
+            // Önce DB'deki PENDING kaydından ProductCode'u oku
+            var pendingRecord = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == callback.MerchantPaymentId && p.Status == "PENDING");
+            
+            string fallbackProductCode;
+            decimal fallbackAmount;
+            
+            if (pendingRecord != null && !string.IsNullOrEmpty(pendingRecord.ProductCode))
+            {
+                fallbackProductCode = pendingRecord.ProductCode;
+                fallbackAmount = pendingRecord.Amount;
+                _logger.LogInformation("✅ DB'den paket bulundu | ProductCode={Pc} | Amount={Amt}", fallbackProductCode, fallbackAmount);
+            }
+            else
+            {
+                // DB'de kayıt yoksa amount'a göre tahmin et
+                fallbackAmount = ParseAmount(callback.Amount);
+                fallbackProductCode = GuessProductCodeFromAmount(fallbackAmount);
+                _logger.LogWarning("⚠️ DB'de pending kayıt yok, amount tahmini kullanılıyor | Amount={Amt}", fallbackAmount);
+            }
 
             customData = new ParatikaCustomData
             {
