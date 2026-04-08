@@ -993,21 +993,33 @@ public class ParatikaPaymentService : IParatikaPaymentService
     {
         try
         {
-            // UserId'yi MerchantPaymentId'den çıkar
             var uid = ExtractUserIdFromPaymentId(callback.MerchantPaymentId);
             if (uid == 0) return;
 
-            _dbContext.PaymentHistories.Add(new PaymentHistory
+            // PENDING kayıt varsa FAILED'a çevir, yoksa yeni ekle
+            var existing = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == (callback.MerchantPaymentId ?? ""));
+
+            if (existing != null)
             {
-                UserId        = uid,
-                OrderId       = callback.MerchantPaymentId ?? "",
-                TransactionId = callback.PgTranId ?? "",
-                Amount        = ParseAmount(callback.Amount),
-                Currency      = "TRY",
-                Status        = "FAILED",
-                PaymentDate   = DateTime.UtcNow,
-                ErrorMessage  = $"Code:{callback.ResponseCode} | {callback.ErrorMsg}"
-            });
+                existing.Status       = "FAILED";
+                existing.ErrorMessage = $"Code:{callback.ResponseCode} | {callback.ErrorMsg}";
+                existing.PaymentDate  = DateTime.UtcNow;
+            }
+            else
+            {
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId        = uid,
+                    OrderId       = callback.MerchantPaymentId ?? "",
+                    TransactionId = callback.PgTranId ?? "",
+                    Amount        = ParseAmount(callback.Amount),
+                    Currency      = "TRY",
+                    Status        = "FAILED",
+                    PaymentDate   = DateTime.UtcNow,
+                    ErrorMessage  = $"Code:{callback.ResponseCode} | {callback.ErrorMsg}"
+                });
+            }
             await _dbContext.SaveChangesAsync();
         }
         catch (Exception ex) { _logger.LogError(ex, "Başarısız ödeme kayıt hatası"); }
