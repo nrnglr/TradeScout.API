@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
 using TradeScout.API.Data;
@@ -35,6 +37,8 @@ public class FeedbackController : ControllerBase
     /// <param name="feedbackDto">Feedback data</param>
     /// <returns>Feedback response with ID</returns>
     [HttpPost]
+    [AllowAnonymous]
+    [EnableRateLimiting("SensitiveAuthPolicy")]  // Spam önleme: 60 dk'da 5 istek/IP
     [ProducesResponseType(typeof(FeedbackResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -121,6 +125,7 @@ public class FeedbackController : ControllerBase
     /// Get feedback by ID (Admin only)
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(FeedbackResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<FeedbackResponseDto>> GetFeedbackById(int id)
@@ -155,6 +160,7 @@ public class FeedbackController : ControllerBase
     /// Get all feedbacks with pagination (Admin only)
     /// </summary>
     [HttpGet]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(IEnumerable<FeedbackResponseDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<FeedbackResponseDto>>> GetAllFeedbacks(
         [FromQuery] int page = 1,
@@ -211,6 +217,7 @@ public class FeedbackController : ControllerBase
     /// Reply to feedback (Admin only)
     /// </summary>
     [HttpPost("{id}/reply")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(FeedbackResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<FeedbackResponseDto>> ReplyToFeedback(
@@ -282,6 +289,7 @@ public class FeedbackController : ControllerBase
     /// Delete feedback (Admin only)
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteFeedback(int id)
@@ -314,6 +322,7 @@ public class FeedbackController : ControllerBase
     /// <param name="email">Email address to send test email</param>
     /// <returns>Test result</returns>
     [HttpGet("test-email")]
+    [Authorize(Roles = "Admin")]  // Production'da bu endpoint'i tamamen kaldırmayı düşünün
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> TestEmail([FromQuery] string email = "info@fgstrade.com")

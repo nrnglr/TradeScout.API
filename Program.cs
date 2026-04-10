@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -122,7 +124,7 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = false; // Development için false, Production'da true olmalı
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment(); // Production'da HTTPS zorunlu
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -145,6 +147,79 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+// ===== RATE LIMITING (K3 / Y-1 güvenlik düzeltmesi) =====
+// Yerleşik .NET 7+ rate limiter — harici paket gerektirmez.
+// Her policy IP bazlı (RemoteIpAddress) çalışır.
+// Paratika callback ve recurring-notification Paratika sunucusundan gelir →
+// bu endpoint'ler rate limiter'dan muaf tutulmuştur.
+builder.Services.AddRateLimiter(limiter =>
+{
+    // Genel API limiti — tüm endpoint'ler için taban kural
+    limiter.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = 200,          // 200 istek
+            Window               = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
+
+    // Auth endpoint'leri: login / register / şifre sıfırlama
+    // Brute-force ve credential stuffing'e karşı sıkı limit
+    limiter.AddPolicy("AuthPolicy", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"auth:{ip}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = 10,           // 10 deneme
+            Window               = TimeSpan.FromMinutes(15),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
+
+    // Şifre sıfırlama / e-posta doğrulama: daha sıkı
+    limiter.AddPolicy("SensitiveAuthPolicy", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"sensitive:{ip}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = 5,            // 5 deneme
+            Window               = TimeSpan.FromMinutes(60),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 0
+        });
+    });
+
+    // Scraper endpoint'leri: ağır işlemler, daha düşük limit
+    limiter.AddPolicy("ScraperPolicy", ctx =>
+    {
+        var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"scraper:{ip}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit          = 20,           // 20 istek
+            Window               = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit           = 2
+        });
+    });
+
+    // Limit aşıldığında dön: 429 Too Many Requests
+    limiter.OnRejected = async (ctx, ct) =>
+    {
+        ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        ctx.HttpContext.Response.Headers["Retry-After"] = "60";
+        await ctx.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            message = "Çok fazla istek gönderildi. Lütfen bir süre bekleyin.",
+            retryAfterSeconds = 60
+        }, ct);
+    };
+});
 
 // ===== CORS CONFIGURATION =====
 // Configure CORS to allow React frontend (Development + Production)
@@ -273,6 +348,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+app.UseRateLimiter(); // Rate limiting — routing'den önce olmalı
 app.UseRouting();
 // ⚠️ CORS middleware - Hataların CORS başlıkları kaybetmemesi için erken konumlandı
 app.UseCors("AllowReactApp");

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using TradeScout.API.Data;
 using TradeScout.API.DTOs;
@@ -40,6 +41,7 @@ public class AuthController : ControllerBase
     /// <returns>Authentication response with JWT token</returns>
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthPolicy")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -151,6 +153,7 @@ public class AuthController : ControllerBase
     /// <returns>Authentication response with JWT token</returns>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("AuthPolicy")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -223,6 +226,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("reset-password-request")]
     [AllowAnonymous]
+    [EnableRateLimiting("SensitiveAuthPolicy")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ResetPasswordRequest([FromBody] ResetPasswordRequestDto request)
@@ -298,6 +302,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("reset-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("SensitiveAuthPolicy")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto request)
@@ -345,6 +350,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("send-verification")]
     [AllowAnonymous]
+    [EnableRateLimiting("SensitiveAuthPolicy")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SendVerificationCode([FromBody] EmailRequestDto request)
@@ -424,6 +430,7 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("verify-email")]
     [AllowAnonymous]
+    [EnableRateLimiting("SensitiveAuthPolicy")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailDto request)

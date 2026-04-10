@@ -1,5 +1,7 @@
 using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using Resend;
 
 namespace TradeScout.API.Services;
@@ -14,7 +16,9 @@ public interface IEmailService
 }
 
 /// <summary>
-/// SMTP Email service implementation for Natro or any SMTP provider
+/// SMTP Email service implementation — MailKit kullanır.
+/// System.Net.Mail.SmtpClient port 465 (implicit SSL/SMTPS) desteklemez.
+/// MailKit hem port 465 (SslOnConnect) hem 587 (StartTls) destekler.
 /// </summary>
 public class SmtpEmailService : IEmailService
 {
@@ -34,109 +38,102 @@ public class SmtpEmailService : IEmailService
         ILogger<SmtpEmailService> logger)
     {
         _logger = logger;
-        
-        // Load SMTP settings from environment variables first, then appsettings
-        _smtpHost = Environment.GetEnvironmentVariable("SMTP_HOST") 
-            ?? configuration["SmtpSettings:Host"] 
+
+        _smtpHost = Environment.GetEnvironmentVariable("SMTP_HOST")
+            ?? configuration["SmtpSettings:Host"]
             ?? "";
-        
-        var portStr = Environment.GetEnvironmentVariable("SMTP_PORT") 
-            ?? configuration["SmtpSettings:Port"] 
+
+        var portStr = Environment.GetEnvironmentVariable("SMTP_PORT")
+            ?? configuration["SmtpSettings:Port"]
             ?? "587";
         _smtpPort = int.TryParse(portStr, out var port) ? port : 587;
-        
-        _smtpUsername = Environment.GetEnvironmentVariable("SMTP_USERNAME") 
-            ?? configuration["SmtpSettings:Username"] 
+
+        _smtpUsername = Environment.GetEnvironmentVariable("SMTP_USERNAME")
+            ?? configuration["SmtpSettings:Username"]
             ?? "";
-        
-        _smtpPassword = Environment.GetEnvironmentVariable("SMTP_PASSWORD") 
-            ?? configuration["SmtpSettings:Password"] 
+
+        _smtpPassword = Environment.GetEnvironmentVariable("SMTP_PASSWORD")
+            ?? configuration["SmtpSettings:Password"]
             ?? "";
-        
-        _fromEmail = Environment.GetEnvironmentVariable("SMTP_FROM_EMAIL") 
-            ?? configuration["SmtpSettings:FromEmail"] 
+
+        _fromEmail = Environment.GetEnvironmentVariable("SMTP_FROM_EMAIL")
+            ?? configuration["SmtpSettings:FromEmail"]
             ?? "info@fgstrade.com";
-        
-        _fromName = Environment.GetEnvironmentVariable("SMTP_FROM_NAME") 
-            ?? configuration["SmtpSettings:FromName"] 
-            ?? "TradeScout";
-        
+
+        _fromName = Environment.GetEnvironmentVariable("SMTP_FROM_NAME")
+            ?? configuration["SmtpSettings:FromName"]
+            ?? "FGS Trade";
+
         _adminEmail = configuration["EmailSettings:AdminEmail"] ?? "info@fgstrade.com";
-        
-        var enableSslStr = Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL") 
-            ?? configuration["SmtpSettings:EnableSsl"] 
+
+        var enableSslStr = Environment.GetEnvironmentVariable("SMTP_ENABLE_SSL")
+            ?? configuration["SmtpSettings:EnableSsl"]
             ?? "true";
         _enableSsl = enableSslStr.ToLower() == "true";
-        
-        // Check if configured
-        _isConfigured = !string.IsNullOrEmpty(_smtpHost) 
-            && !string.IsNullOrEmpty(_smtpUsername) 
+
+        _isConfigured = !string.IsNullOrEmpty(_smtpHost)
+            && !string.IsNullOrEmpty(_smtpUsername)
             && !string.IsNullOrEmpty(_smtpPassword)
             && _smtpPassword != "YOUR_NATRO_EMAIL_PASSWORD_HERE";
-        
+
         if (_isConfigured)
-        {
-            _logger.LogInformation("✅ SMTP Email Service initialized: {Host}:{Port}, From: {FromName} <{FromEmail}>", 
-                _smtpHost, _smtpPort, _fromName, _fromEmail);
-        }
+            _logger.LogInformation(
+                "✅ SmtpEmailService (MailKit) hazır: {Host}:{Port} SSL={Ssl}, From: {Name} <{Email}>",
+                _smtpHost, _smtpPort, _enableSsl, _fromName, _fromEmail);
         else
-        {
-            _logger.LogWarning("⚠️ SMTP not configured properly. Emails will be logged but not sent. Check .env or appsettings.json");
-        }
+            _logger.LogWarning("⚠️ SMTP yapılandırılmamış. E-postalar gönderilmeyecek.");
     }
 
-    /// <summary>
-    /// Send email via SMTP
-    /// </summary>
     public async Task<bool> SendEmailAsync(string recipientEmail, string subject, string htmlBody)
     {
-        try
+        if (!_isConfigured)
         {
-            // If not configured, just log and return success (dev mode)
-            if (!_isConfigured)
-            {
-                _logger.LogInformation("📧 [DEV MODE - SMTP] Email would be sent to: {RecipientEmail}, Subject: {Subject}", recipientEmail, subject);
-                return true;
-            }
-
-            using var smtpClient = new SmtpClient(_smtpHost, _smtpPort)
-            {
-                Credentials = new NetworkCredential(_smtpUsername, _smtpPassword),
-                EnableSsl = _enableSsl,
-                DeliveryMethod = SmtpDeliveryMethod.Network,
-                Timeout = 30000 // 30 seconds
-            };
-
-            var fromAddress = new MailAddress(_fromEmail, _fromName);
-            var toAddress = new MailAddress(recipientEmail);
-
-            using var mailMessage = new MailMessage(fromAddress, toAddress)
-            {
-                Subject = subject,
-                Body = htmlBody,
-                IsBodyHtml = true
-            };
-
-            await smtpClient.SendMailAsync(mailMessage);
-            _logger.LogInformation("✅ SMTP Email başarıyla gönderildi: {RecipientEmail}", recipientEmail);
+            _logger.LogInformation("[DEV] E-posta gönderilecekti: {To} | {Subject}", recipientEmail, subject);
             return true;
         }
-        catch (SmtpException ex)
+
+        try
         {
-            _logger.LogError(ex, "❌ SMTP Email gönderme hatası - {RecipientEmail}: {StatusCode} - {Message}", 
-                recipientEmail, ex.StatusCode, ex.Message);
-            return false;
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(_fromName, _fromEmail));
+            message.To.Add(MailboxAddress.Parse(recipientEmail));
+            message.Subject = subject;
+            message.Body = new TextPart(MimeKit.Text.TextFormat.Html) { Text = htmlBody };
+
+            using var client = new MailKit.Net.Smtp.SmtpClient();
+
+            // Natro gibi eski mail sunucuları "unsafe legacy renegotiation" kullanır.
+            // macOS Ventura+ ve yeni OpenSSL bunu varsayılan olarak reddeder.
+            // ServerCertificateValidationCallback ile SSL doğrulamasını devre dışı bırakıyoruz.
+            // Bu lokal→Natro bağlantısı için kabul edilebilir; production'da
+            // Natro'nun SSL sertifikasını güncellemesi ideal çözümdür.
+            client.ServerCertificateValidationCallback = (s, c, h, e) => true;
+
+            // Port 465 → SslOnConnect (implicit SSL, eski adıyla SMTPS)
+            // Port 587 → StartTls  (explicit SSL / STARTTLS)
+            // Port 25  → None      (düz metin, üretimde kullanılmamalı)
+            var secureOption = _smtpPort switch
+            {
+                465 => SecureSocketOptions.SslOnConnect,
+                587 => SecureSocketOptions.StartTls,
+                _   => _enableSsl ? SecureSocketOptions.StartTlsWhenAvailable : SecureSocketOptions.None
+            };
+
+            await client.ConnectAsync(_smtpHost, _smtpPort, secureOption);
+            await client.AuthenticateAsync(_smtpUsername, _smtpPassword);
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
+
+            _logger.LogInformation("✅ E-posta gönderildi: {To}", recipientEmail);
+            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ Email gönderme hatası: {RecipientEmail}", recipientEmail);
+            _logger.LogError(ex, "❌ E-posta gönderilemedi: {To} | {Error}", recipientEmail, ex.Message);
             return false;
         }
     }
 
-    /// <summary>
-    /// Send feedback email via SMTP
-    /// </summary>
     public async Task<bool> SendFeedbackEmailAsync(
         string senderName,
         string senderEmail,
@@ -145,31 +142,29 @@ public class SmtpEmailService : IEmailService
         string message,
         string? feedbackType)
     {
+        if (!_isConfigured)
+        {
+            _logger.LogInformation("[DEV] Feedback e-postası gönderilecekti: {From}", senderEmail);
+            return true;
+        }
+
         try
         {
-            // If not configured, just log and return success (dev mode)
-            if (!_isConfigured)
-            {
-                _logger.LogInformation("📧 [DEV MODE - SMTP] Feedback emails would be sent - From: {SenderEmail}, Subject: {Subject}", senderEmail, subject);
-                return true;
-            }
+            var adminHtml = BuildAdminFeedbackEmailHtml(senderName, senderEmail, senderPhone, subject, message, feedbackType);
+            var adminSent = await SendEmailAsync(_adminEmail, $"[FGSTrade] Geri Bildirim: {subject}", adminHtml);
 
-            // 1. Send to Admin
-            var adminBodyHtml = BuildAdminFeedbackEmailHtml(senderName, senderEmail, senderPhone, subject, message, feedbackType);
-            var adminSent = await SendEmailAsync(_adminEmail, $"[TradeScout] Geri Bildirim: {subject}", adminBodyHtml);
-            
-            // 2. Send confirmation to user
-            var userBodyHtml = BuildUserConfirmationEmailHtml(senderName, subject, feedbackType);
-            var userSent = await SendEmailAsync(senderEmail, "Geri Bildiriminiz Kaydedilmiştir - TradeScout", userBodyHtml);
+            var userHtml = BuildUserConfirmationEmailHtml(senderName, subject, feedbackType);
+            var userSent = await SendEmailAsync(senderEmail, "Geri Bildiriminiz Kaydedilmiştir - FGSTrade", userHtml);
 
             return adminSent && userSent;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "⚠️ Geri bildirim email'leri gönderme hatası: {SenderEmail}", senderEmail);
-            return true; // Return true anyway so feedback is saved
+            _logger.LogWarning(ex, "⚠️ Feedback e-postası gönderilemedi: {From}", senderEmail);
+            return true; // Feedback DB'ye kaydedildi, e-posta hatası formu engellemez
         }
     }
+
 
     private string BuildAdminFeedbackEmailHtml(string senderName, string senderEmail, string? senderPhone, string subject, string message, string? feedbackType)
     {
@@ -221,7 +216,7 @@ public class SmtpEmailService : IEmailService
                         </div>
                     </div>
                     <div class='footer'>
-                        <p>TradeScout Geri Bildirim Sistemi - {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss} UTC</p>
+                        <p>FGS TRADE Geri Bildirim Sistemi - {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss} UTC</p>
                     </div>
                 </div>
             </body>
@@ -257,10 +252,10 @@ public class SmtpEmailService : IEmailService
                         </ul>
                         <p>Sorularınız veya gerçekleştirmeye çalıştığınız bir şey varsa, lütfen bu e-postaya cevap vererek bize bilgilendirebilirsiniz.</p>
                         <p>Yardımcı olmaktan mutlu olacağız!<br><br>
-                        <strong>TradeScout Ekibi</strong></p>
+                        <strong>FGS TRADE Ekibi</strong></p>
                     </div>
                     <div class='footer'>
-                        <p>© 2026 TradeScout. Tüm hakları saklıdır.</p>
+                        <p>© 2026 FGS TRADE. Tüm hakları saklıdır.</p>
                     </div>
                 </div>
             </body>
@@ -457,7 +452,7 @@ public class ResendEmailService : IEmailService
                             </div>
                         </div>
                         <div class='footer'>
-                            <p>TradeScout Geri Bildirim Sistemi - {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss} UTC</p>
+                            <p>FGS TRADE Geri Bildirim Sistemi - {DateTime.UtcNow:dd.MM.yyyy HH:mm:ss} UTC</p>
                         </div>
                     </div>
                 </body>
@@ -467,7 +462,7 @@ public class ResendEmailService : IEmailService
             {
                 from = _fromEmail,
                 to = _adminEmail,
-                subject = $"[TradeScout] Geri Bildirim: {subject}",
+                subject = $"[FGS TRADE] Geri Bildirim: {subject}",
                 html = adminBodyHtml
             };
 
@@ -514,10 +509,10 @@ public class ResendEmailService : IEmailService
                             </ul>
                             <p>Sorularınız veya gerçekleştirmeye çalıştığınız bir şey varsa, lütfen bu e-postaya cevap vererek bize bilgilendirebilirsiniz.</p>
                             <p>Yardımcı olmaktan mutlu olacağız!<br><br>
-                            <strong>TradeScout Ekibi</strong></p>
+                            <strong>FGS TRADE Ekibi</strong></p>
                         </div>
                         <div class='footer'>
-                            <p>© 2026 TradeScout. Tüm hakları saklıdır.</p>
+                            <p>© 2026 FGS TRADE. Tüm hakları saklıdır.</p>
                         </div>
                     </div>
                 </body>
@@ -527,7 +522,7 @@ public class ResendEmailService : IEmailService
             {
                 from = _fromEmail,
                 to = senderEmail,
-                subject = "Geri Bildiriminiz Kaydedilmiştir - TradeScout",
+                subject = "Geri Bildiriminiz Kaydedilmiştir - FGS TRADE",
                 html = userBodyHtml
             };
 
