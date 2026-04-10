@@ -838,6 +838,10 @@ public class ScraperController : ControllerBase
             result = result.Replace("__", "_");
         }
 
+        // Maksimum 30 karakter — Windows yol uzunluğu sınırı için
+        if (result.Length > 30)
+            result = result.Substring(0, 30);
+
         return result.Trim('_');
     }
 
