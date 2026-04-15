@@ -105,7 +105,12 @@ public class MorparaPaymentService : IMorparaPaymentService
         _logger = logger;
         _dbContext = dbContext;
 
-       
+        _clientId = Env("MORPARA_CLIENT_ID", "");
+        _clientSecret = Env("MORPARA_CLIENT_SECRET", "");
+        _merchantId = Env("MORPARA_MERCHANT_ID", "");
+        _apiKey = Env("MORPARA_API_KEY", "");
+        _baseUrl = Env("MORPARA_BASE_URL", "https://sale-gateway.morpara.com");
+        _callbackUrl = Env("MORPARA_CALLBACK_URL", "https://api.fgstrade.com/api/payment/morpara/callback");
     }
 
     public List<FgsTradePackage> GetAvailablePackages() => _packages;

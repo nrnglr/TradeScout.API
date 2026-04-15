@@ -314,6 +314,7 @@ builder.Services.AddScoped<IExcelExportService, ExcelExportService>();
 builder.Services.AddScoped<IPdfExportService, PdfExportService>(); // 📄 PDF Export Service (TODO: Service eksik)
 //builder.Services.AddScoped<IToslaPaymentService, ToslaPaymentService>(); // 💳 Tosla Payment Service
 builder.Services.AddHttpClient<IParatikaPaymentService, ParatikaPaymentService>();// 💳 Paratika Payment Service (HTTP Client ile)
+builder.Services.AddHttpClient<IMorparaPaymentService, MorparaPaymentService>();
 // ===== CONTROLLER CONFIGURATION =====
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
