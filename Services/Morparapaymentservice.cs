@@ -147,8 +147,8 @@ public class MorparaPaymentService : IMorparaPaymentService
 
             var amountStr = finalPrice.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
             var frontendBase = Env("FRONTEND_URL", "https://fgstrade.com");
-            var returnUrl = $"{frontendBase}/payment/success";
-            var failUrl = $"{frontendBase}/payment/failed";
+            var returnUrl = $"{frontendBase}/payment/success?conversationId={conversationId}";
+            var failUrl = $"{frontendBase}/payment/failed?conversationId={conversationId}";
             var installmentInt = request.Installment <= 1 ? 0 : request.Installment;
             var installmentStr = installmentInt.ToString();
 
