@@ -58,19 +58,17 @@ public class MorparaPaymentController : ControllerBase
     }
 
     // ─── POST /api/payment/morpara/callback ───────────────────────────────────
-    // ÖNEMLI: Bu endpoint dışarıdan erişilebilir ve [AllowAnonymous] olmalı.
-    // Mor Para bu adrese POST atar — Mor Para panelinde callback URL olarak tanımlayın:
-    // https://api.fgstrade.com/api/payment/morpara/callback
     [HttpPost("callback")]
     [AllowAnonymous]
     public async Task<IActionResult> Callback([FromForm] IFormCollection form)
     {
-        // Mor Para callback form alanlarını oku
-        // NOT: Mor Para'nın tam callback field isimlerini panelden veya dokümandan teyit edin.
-        // Aşağıdaki field isimleri dokümandan çıkarılan tahminlerdir.
+        // Mor Para bazen conversationId'ye ?orderId=... ekliyor, temizle
+        var rawConvId   = form["conversationId"].ToString();
+        var cleanConvId = rawConvId.Contains('?') ? rawConvId.Split('?')[0] : rawConvId;
+
         var callback = new MorparaCallbackDto
         {
-            ConversationId = form["conversationId"].ToString(),
+            ConversationId = cleanConvId,
             OrderId        = form["orderId"].ToString(),
             PaymentId      = form["paymentId"].ToString(),
             ResponseCode   = form["responseCode"].ToString(),
@@ -83,18 +81,17 @@ public class MorparaPaymentController : ControllerBase
 
         var result = await _paymentService.ProcessCallbackAsync(callback);
 
-        // Paratika'daki gibi HTML yönlendirme — tarayıcı uyumluluğu için en güvenli yol
         string frontendUrl;
         if (result.Success)
         {
-            frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.ConversationId}";
+            frontendUrl = $"{FrontendBaseUrl}/payment/success?cid={callback.ConversationId}";
         }
         else
         {
             _logger.LogError("❌ Mor Para callback başarısız | ConvId={Id} | Msg={Msg}",
                 callback.ConversationId, result.ErrorMessage);
             var errorCode = Uri.EscapeDataString(result.ErrorCode ?? "PAYMENT_FAILED");
-            frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.ConversationId}&errorCode={errorCode}";
+            frontendUrl = $"{FrontendBaseUrl}/payment/failed?cid={callback.ConversationId}&errorCode={errorCode}";
         }
 
         return Content(
@@ -103,7 +100,6 @@ public class MorparaPaymentController : ControllerBase
     }
 
     // ─── POST /api/payment/morpara/verify ─────────────────────────────────────
-    // Frontend'den ödeme sonrası bu endpoint çağrılır (tarayıcı kapanması güvenlik ağı)
     [HttpPost("verify")]
     [Authorize]
     public async Task<IActionResult> Verify([FromBody] MorparaVerifyRequest body)
@@ -111,7 +107,12 @@ public class MorparaPaymentController : ControllerBase
         if (string.IsNullOrWhiteSpace(body.ConversationId))
             return BadRequest(new { error = "conversationId gereklidir" });
 
-        var result = await _paymentService.VerifyAndProcessPaymentAsync(body.ConversationId);
+        // Gelen conversationId'yi de temizle
+        var cleanConvId = body.ConversationId.Contains('?')
+            ? body.ConversationId.Split('?')[0]
+            : body.ConversationId;
+
+        var result = await _paymentService.VerifyAndProcessPaymentAsync(cleanConvId);
 
         if (!result.Success)
             return BadRequest(new { message = result.ErrorMessage });
@@ -119,7 +120,7 @@ public class MorparaPaymentController : ControllerBase
         return Ok(new
         {
             success            = true,
-            orderId            = body.ConversationId,
+            orderId            = cleanConvId,
             isAlreadyProcessed = result.IsAlreadyProcessed,
             creditsAdded       = result.CreditsAdded,
             packageName        = result.PackageName,
@@ -129,7 +130,6 @@ public class MorparaPaymentController : ControllerBase
     }
 
     // ─── POST /api/payment/morpara/checkpayment ───────────────────────────────
-    // Manuel/debug amaçlı ödeme sorgulama (opsiyonel)
     [HttpPost("checkpayment")]
     [Authorize]
     public async Task<IActionResult> CheckPayment([FromBody] MorparaCheckPaymentRequest body)
