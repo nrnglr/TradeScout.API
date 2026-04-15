@@ -180,6 +180,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 merchantId = _merchantId,
                 returnUrl = returnUrl,
                 failUrl = failUrl,
+                callbackUrl           = _callbackUrl, 
                 paymentMethod = "HOSTEDPAYMENT",
                 paymentInstrumentType = "CARD",
                 language = "tr",
