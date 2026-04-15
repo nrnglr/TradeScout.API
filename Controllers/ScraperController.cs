@@ -696,25 +696,33 @@ public class ScraperController : ControllerBase
 
                 // ✅ SMART CREDIT DEDUCTION (at the END, only for successful enrichments)
                 // Her arama sadece 1 kredi harcar (kaç firma bulunursa bulunsun)
+                // ✅ SMART CREDIT DEDUCTION (at the END, only for successful enrichments)
                 var actualCreditsUsed = 0;
                 if (user.Role != "Admin")
                 {
                     var creditsBefore = user.Credits;
                     
-                    // Her arama için sabit 1 kredi
-                    actualCreditsUsed = 1;
+                    // 🌟 KRİTİK GÜNCELLEME: Sadece firma bulunduysa kredi düş
+                    if (enrichedBusinesses.Count > 0)
+                    {
+                        actualCreditsUsed = 1;
+                        
+                        // Kullanıcının kredisi yetmiyorsa (ek güvenlik)
+                        actualCreditsUsed = Math.Min(actualCreditsUsed, user.Credits);
+                        
+                        user.Credits -= actualCreditsUsed;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("⚠️ Firma bulunamadığı için kredi düşülmedi. UserId: {UserId}", userId);
+                    }
                     
-                    // Kullanıcının kredisi yetmiyorsa (zaten kontrol edildi ama yine de)
-                    actualCreditsUsed = Math.Min(actualCreditsUsed, user.Credits);
-                    
-                    user.Credits -= actualCreditsUsed;
-                    
-                    _logger.LogInformation("💳 KREDİ DÜŞÜŞÜ | UserId={UserId} | Önceki={Before} | Düşen={Used} | Kalan={After}", 
+                    _logger.LogInformation("💳 KREDİ DURUMU | UserId={UserId} | Önceki={Before} | Düşen={Used} | Kalan={After}", 
                         userId, creditsBefore, actualCreditsUsed, user.Credits);
+                    
                     _logger.LogInformation("📊 İşlem detayı: {TotalCount} firma bulundu, {SuccessCount} zenginleştirildi", 
                         enrichedBusinesses.Count, successfulCount);
                 }
-
                 // Update job
                 job.Status = enrichedBusinesses.Count > 0 ? "Completed" : "NoResults";
                 job.TotalResults = enrichedBusinesses.Count;
