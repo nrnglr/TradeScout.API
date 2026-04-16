@@ -321,7 +321,7 @@ public class MorparaPaymentService : IMorparaPaymentService
         {
             _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
 
-            var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
+            var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId });
 
             var payload = new { merchantId = _merchantId, conversationId, sign };
             var json = JsonSerializer.Serialize(payload);
