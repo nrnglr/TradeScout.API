@@ -311,16 +311,28 @@ public class MorparaPaymentService : IMorparaPaymentService
         {
             _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
 
-            // decodedApiKey saçmalığını tamamen sildik, _apiKey'i doğrudan veriyoruz:
-            var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
+            // 1. Şifreyi Base64'ten çözüyoruz
+            var decodedApiKey = Encoding.UTF8.GetString(Convert.FromBase64String(_apiKey));
 
-            var payload = new { merchantId = _merchantId, conversationId, sign };
+            // 2. Doğru sırayla imzayı oluşturuyoruz (ConversationId, MerchantId, ApiKey)
+            var sign = CalculateDynamicSign(new List<string> { conversationId, _merchantId, decodedApiKey });
+
+            // 3. EKSİK OLAN SATIR BURASI! Payload'u (JSON Gövdesini) oluşturuyoruz
+            var payload = new
+            {
+                merchantId = _merchantId,
+                conversationId = conversationId,
+                sign = sign
+            };
+
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var requestMessage = new HttpRequestMessage(HttpMethod.Post,
                 $"{_baseUrl}/v1/Payment/CheckPayment")
             { Content = content };
+
+            // ... (kodun geri kalanı AddMorparaHeaders(requestMessage); ile devam edecek)
             AddMorparaHeaders(requestMessage);
 
             var response = await _httpClient.SendAsync(requestMessage);
