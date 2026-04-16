@@ -319,6 +319,7 @@ public class MorparaPaymentService : IMorparaPaymentService
     { 
         merchantId = _merchantId, 
         conversationId = conversationId, 
+        apiKey = _apiKey,
         sign = sign 
     };
 
