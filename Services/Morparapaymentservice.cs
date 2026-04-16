@@ -331,8 +331,7 @@ public class MorparaPaymentService : IMorparaPaymentService
 
     AddMorparaHeaders(requestMessage);
 
-    // ... (Kodun geri kalanı aynı kalacak: httpClient.SendAsync vs.)
-            AddMorparaHeaders(requestMessage);
+    
 
             var response = await _httpClient.SendAsync(requestMessage);
             var rawBody = await response.Content.ReadAsStringAsync();
