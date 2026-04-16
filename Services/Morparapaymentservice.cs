@@ -180,7 +180,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 merchantId = _merchantId,
                 returnUrl = returnUrl,
                 failUrl = failUrl,
-                callbackUrl           = _callbackUrl, 
+                callbackUrl = _callbackUrl,
                 paymentMethod = "HOSTEDPAYMENT",
                 paymentInstrumentType = "CARD",
                 language = "tr",
@@ -311,6 +311,7 @@ public class MorparaPaymentService : IMorparaPaymentService
         {
             _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
 
+            // decodedApiKey saçmalığını tamamen sildik, _apiKey'i doğrudan veriyoruz:
             var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
 
             var payload = new { merchantId = _merchantId, conversationId, sign };
