@@ -308,30 +308,29 @@ public class MorparaPaymentService : IMorparaPaymentService
     public async Task<MorparaCheckPaymentResponseDto?> CheckPaymentAsync(string conversationId)
     {
         try
-{
-    _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
+        {
+            _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
 
-    // DİKKAT: decodedApiKey satırını tamamen kaldırdık!
-    // Doğrudan _apiKey kullanıyoruz. Sıralama: merchantId, conversationId, apiKey
-    var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
+            // DOĞRU:
+            var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
 
-    var payload = new 
-    { 
-        merchantId = _merchantId, 
-        conversationId = conversationId, 
-        sign = sign 
-    };
+            var payload = new
+            {
+                merchantId = _merchantId,
+                conversationId = conversationId,
+                sign = sign
+            };
 
-    var json = JsonSerializer.Serialize(payload);
-    var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-    var requestMessage = new HttpRequestMessage(HttpMethod.Post,
-        $"{_baseUrl}/v1/Payment/CheckPayment")
-    { Content = content };
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post,
+                $"{_baseUrl}/v1/Payment/CheckPayment")
+            { Content = content };
 
-    AddMorparaHeaders(requestMessage);
+            AddMorparaHeaders(requestMessage);
 
-    
+
 
             var response = await _httpClient.SendAsync(requestMessage);
             var rawBody = await response.Content.ReadAsStringAsync();
