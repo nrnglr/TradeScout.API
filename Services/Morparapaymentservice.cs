@@ -259,12 +259,13 @@ public class MorparaPaymentService : IMorparaPaymentService
     {
         try
         {
-            _logger.LogInformation("📩 MORPARA CALLBACK | ConvId={Id} | Code={Code}",
-                callback.ConversationId, callback.ResponseCode);
+            _logger.LogInformation("📩 MORPARA CALLBACK | ConvId={Id} | OrderId={OrderId} | Code={Code}",
+                callback.ConversationId, callback.OrderId, callback.ResponseCode);
 
             if (string.IsNullOrEmpty(callback.ConversationId))
                 return new MorparaCallbackResult { Success = false, ErrorMessage = "ConversationId eksik" };
 
+            // Mor Para'nın orderId'si veya bizim FGS... conversationId'si ile CheckPayment yap
             var checkResult = await CheckPaymentAsync(callback.ConversationId);
 
             if (checkResult == null)
@@ -278,21 +279,30 @@ public class MorparaPaymentService : IMorparaPaymentService
             bool isApproved = checkResult.ResponseCode == "B0000"
                            && checkResult.ResponseDescription == "Approved";
 
+            // CheckPayment response'undaki conversationId bizim FGS... değerimiz olabilir
+            // Aktivasyon için bunu kullan, yoksa callback'teki ConversationId'yi kullan
+            var ourConvId = !string.IsNullOrEmpty(checkResult.ConversationId)
+                ? checkResult.ConversationId
+                : callback.ConversationId;
+
+            _logger.LogInformation("🔍 Aktivasyon için ConvId={OurId} | CheckPayment ConvId={CId}",
+                ourConvId, checkResult.ConversationId);
+
             if (!isApproved)
             {
-                await SaveFailedPaymentAsync(callback.ConversationId,
+                await SaveFailedPaymentAsync(ourConvId,
                     $"{checkResult.ResponseCode}: {checkResult.ResponseDescription}");
                 return new MorparaCallbackResult
                 {
                     Success = false,
-                    ConversationId = callback.ConversationId,
+                    ConversationId = ourConvId,
                     ErrorCode = checkResult.ResponseCode,
                     ErrorMessage = checkResult.ResponseDescription
                 };
             }
 
-            await ActivateMembershipAsync(callback.ConversationId, checkResult);
-            return new MorparaCallbackResult { Success = true, ConversationId = callback.ConversationId };
+            await ActivateMembershipAsync(ourConvId, checkResult);
+            return new MorparaCallbackResult { Success = true, ConversationId = ourConvId };
         }
         catch (Exception ex)
         {
@@ -371,8 +381,10 @@ public class MorparaPaymentService : IMorparaPaymentService
     {
         try
         {
+            // Hem bizim FGS... hem Mor Para'nın orderId'si ile SUCCESS kaydı ara
             var existing = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == conversationId && p.Status == "SUCCESS")
+                .Where(p => (p.OrderId == conversationId || p.TransactionId == conversationId)
+                         && p.Status == "SUCCESS")
                 .FirstOrDefaultAsync();
 
             if (existing != null)
@@ -399,10 +411,16 @@ public class MorparaPaymentService : IMorparaPaymentService
                     ErrorMessage = $"Ödeme başarısız: {checkResult.ResponseDescription}"
                 };
 
-            await ActivateMembershipAsync(conversationId, checkResult);
+            // CheckPayment'tan gelen bizim FGS... conversationId'sini kullan
+            var ourConvId = !string.IsNullOrEmpty(checkResult.ConversationId)
+                ? checkResult.ConversationId
+                : conversationId;
+
+            await ActivateMembershipAsync(ourConvId, checkResult);
 
             var payment = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == conversationId && p.Status == "SUCCESS")
+                .Where(p => (p.OrderId == ourConvId || p.OrderId == conversationId)
+                         && p.Status == "SUCCESS")
                 .FirstOrDefaultAsync();
 
             if (payment == null)
@@ -436,9 +454,27 @@ public class MorparaPaymentService : IMorparaPaymentService
         {
             var (userId, productCode) = ExtractFromConversationId(conversationId);
 
+            // Önce tam eşleşme ile PENDING ara
             var pending = await _dbContext.PaymentHistories
                 .Where(p => p.OrderId == conversationId && p.Status == "PENDING")
                 .FirstOrDefaultAsync();
+
+            // Bulamazsa — conversationId FGS... formatında değilse (Mor Para orderId ise)
+            // en son PENDING kaydını userId üzerinden bulmaya çalış
+            if (pending == null && userId <= 0)
+            {
+                // checkResult'taki conversationId FGS... formatında olabilir
+                var fgsConvId = checkResult.ConversationId;
+                if (!string.IsNullOrEmpty(fgsConvId) && fgsConvId.StartsWith("FGS"))
+                {
+                    var (extractedUserId, _) = ExtractFromConversationId(fgsConvId);
+                    if (extractedUserId > 0) userId = extractedUserId;
+
+                    pending = await _dbContext.PaymentHistories
+                        .Where(p => p.OrderId == fgsConvId && p.Status == "PENDING")
+                        .FirstOrDefaultAsync();
+                }
+            }
 
             if (pending != null && pending.UserId > 0) userId = pending.UserId;
 

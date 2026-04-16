@@ -62,7 +62,6 @@ public class MorparaPaymentController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Callback([FromForm] IFormCollection form)
     {
-        // Mor Para bazen conversationId'ye ?orderId=... ekliyor, temizle
         var rawConvId   = form["conversationId"].ToString();
         var cleanConvId = rawConvId.Contains('?') ? rawConvId.Split('?')[0] : rawConvId;
 
@@ -76,8 +75,8 @@ public class MorparaPaymentController : ControllerBase
             MerchantId     = form["merchantId"].ToString(),
         };
 
-        _logger.LogInformation("📩 MORPARA CALLBACK | ConvId={Id} | Code={Code}",
-            callback.ConversationId, callback.ResponseCode);
+        _logger.LogInformation("📩 MORPARA CALLBACK POST | ConvId={Id} | OrderId={OrderId} | Code={Code}",
+            callback.ConversationId, callback.OrderId, callback.ResponseCode);
 
         var result = await _paymentService.ProcessCallbackAsync(callback);
 
@@ -97,6 +96,42 @@ public class MorparaPaymentController : ControllerBase
         return Content(
             $"<html><head><script>window.location.href='{frontendUrl}';</script></head><body>Yönlendiriliyorsunuz...</body></html>",
             "text/html");
+    }
+
+    // ─── GET /api/payment/morpara/callback ────────────────────────────────────
+    // Mor Para returnUrl'e GET ile orderId query param gönderiyor
+    [HttpGet("callback")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CallbackGet([FromQuery] string? orderId, [FromQuery] string? conversationId)
+    {
+        _logger.LogInformation("📩 MORPARA CALLBACK GET | OrderId={OrderId} | ConvId={ConvId}",
+            orderId, conversationId);
+
+        // Mor Para'nın orderId'si ile CheckPayment yapıyoruz
+        var queryId = orderId ?? conversationId ?? "";
+
+        var callback = new MorparaCallbackDto
+        {
+            ConversationId = queryId,
+            OrderId        = orderId ?? "",
+        };
+
+        var result = await _paymentService.ProcessCallbackAsync(callback);
+
+        string frontendUrl;
+        if (result.Success)
+        {
+            frontendUrl = $"{FrontendBaseUrl}/payment/success?cid={queryId}";
+        }
+        else
+        {
+            _logger.LogError("❌ Mor Para GET callback başarısız | OrderId={Id} | Msg={Msg}",
+                queryId, result.ErrorMessage);
+            var errorCode = Uri.EscapeDataString(result.ErrorCode ?? "PAYMENT_FAILED");
+            frontendUrl = $"{FrontendBaseUrl}/payment/failed?cid={queryId}&errorCode={errorCode}";
+        }
+
+        return Redirect(frontendUrl);
     }
 
     // ─── POST /api/payment/morpara/verify ─────────────────────────────────────
