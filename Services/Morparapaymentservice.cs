@@ -308,31 +308,30 @@ public class MorparaPaymentService : IMorparaPaymentService
     public async Task<MorparaCheckPaymentResponseDto?> CheckPaymentAsync(string conversationId)
     {
         try
-        {
-            _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
+{
+    _logger.LogInformation("🔍 CheckPayment | ConvId={Id}", conversationId);
 
-            // 1. Şifreyi Base64'ten çözüyoruz
-            var decodedApiKey = Encoding.UTF8.GetString(Convert.FromBase64String(_apiKey));
+    // DİKKAT: decodedApiKey satırını tamamen kaldırdık!
+    // Doğrudan _apiKey kullanıyoruz. Sıralama: merchantId, conversationId, apiKey
+    var sign = CalculateDynamicSign(new List<string> { _merchantId, conversationId, _apiKey });
 
-            // 2. Doğru sırayla imzayı oluşturuyoruz (ConversationId, MerchantId, ApiKey)
-            var sign = CalculateDynamicSign(new List<string> { conversationId, _merchantId, decodedApiKey });
+    var payload = new 
+    { 
+        merchantId = _merchantId, 
+        conversationId = conversationId, 
+        sign = sign 
+    };
 
-            // 3. EKSİK OLAN SATIR BURASI! Payload'u (JSON Gövdesini) oluşturuyoruz
-            var payload = new
-            {
-                merchantId = _merchantId,
-                conversationId = conversationId,
-                sign = sign
-            };
+    var json = JsonSerializer.Serialize(payload);
+    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+    var requestMessage = new HttpRequestMessage(HttpMethod.Post,
+        $"{_baseUrl}/v1/Payment/CheckPayment")
+    { Content = content };
 
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post,
-                $"{_baseUrl}/v1/Payment/CheckPayment")
-            { Content = content };
+    AddMorparaHeaders(requestMessage);
 
-            // ... (kodun geri kalanı AddMorparaHeaders(requestMessage); ile devam edecek)
+    // ... (Kodun geri kalanı aynı kalacak: httpClient.SendAsync vs.)
             AddMorparaHeaders(requestMessage);
 
             var response = await _httpClient.SendAsync(requestMessage);
