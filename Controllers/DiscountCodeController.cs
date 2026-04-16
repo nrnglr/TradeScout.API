@@ -104,8 +104,8 @@ public class DiscountCodeController : ControllerBase
             }
 
             // Paketi bul ve fiyatını al
-            var paratikaService = HttpContext.RequestServices.GetRequiredService<IParatikaPaymentService>();
-            var packages = paratikaService.GetAvailablePackages();
+            var morparaService = HttpContext.RequestServices.GetRequiredService<IMorparaPaymentService>();
+            var packages = morparaService.GetAvailablePackages();
             var package = packages.FirstOrDefault(p => 
                 p.ProductCode == request.PackageCode || 
                 p.Alias.Equals(request.PackageCode, StringComparison.OrdinalIgnoreCase));
@@ -115,12 +115,12 @@ public class DiscountCodeController : ControllerBase
                 return BadRequest(new { message = "Geçersiz paket kodu." });
             }
 
-            // İndirimli fiyatı hesapla
-            var originalPrice = package.PriceTry;
+            // İndirimli fiyatı USD cinsinden hesapla
+            var originalPrice = package.PriceUsd;
             var discountAmount = originalPrice * discountCode.DiscountPercentage / 100m;
             var discountedPrice = originalPrice - discountAmount;
 
-            _logger.LogInformation("✅ Geçerli indirim kodu | %{Discount} indirim | {Original} TL → {Discounted} TL",
+            _logger.LogInformation("✅ Geçerli indirim kodu | %{Discount} indirim | {Original} USD → {Discounted} USD",
                 discountCode.DiscountPercentage, originalPrice, discountedPrice);
 
             return Ok(new DiscountCodeValidationDto
