@@ -132,7 +132,7 @@ public class MorparaPaymentService : IMorparaPaymentService
 
             var conversationId = BuildConversationId(request.UserId);
 
-            decimal finalPrice = package.PriceUsd;
+            decimal finalPrice = package.PriceTry;
             decimal discountPercent = 0;
             if (!string.IsNullOrEmpty(request.DiscountCode))
             {
@@ -141,7 +141,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 if (dc != null)
                 {
                     discountPercent = dc.DiscountPercentage;
-                    finalPrice = Math.Round(package.PriceUsd * (1 - discountPercent / 100), 2);
+                    finalPrice = Math.Round(package.PriceTry * (1 - discountPercent / 100), 2);
                 }
             }
 
@@ -168,7 +168,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 "False",         // VftFlag — büyük F zorunlu
                 installmentStr,
                 amountStr,
-                "840",           // USD
+                "949",           // USD
                 _merchantId,     // PFSubMerchantId
                 _apiKey          // d2VydHl1YXNkZmdoamts (maildeki değer)
             };
@@ -192,7 +192,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                     transactionType = "SALE",
                     installmentCount = installmentInt,
                     amount = amountStr,
-                    currencyCode = "840",
+                    currencyCode = "949",
                     vftFlag = false
                 },
                 extraParameter = new
@@ -329,9 +329,6 @@ public class MorparaPaymentService : IMorparaPaymentService
                 $"{_baseUrl}/v1/Payment/CheckPayment")
             { Content = content };
 
-            AddMorparaHeaders(requestMessage);
-
-            // ... (Kodun geri kalanı aynı kalacak: httpClient.SendAsync vs.)
             AddMorparaHeaders(requestMessage);
 
             var response = await _httpClient.SendAsync(requestMessage);
