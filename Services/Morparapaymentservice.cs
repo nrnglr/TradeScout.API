@@ -84,17 +84,20 @@ public class MorparaPaymentService : IMorparaPaymentService
 
     private readonly List<FgsTradePackage> _packages = new()
     {
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=1m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1m,   Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=75m,    PriceTry=4257m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",       NameTr="Profesyonel Yıllık",PriceUsd=195m,   PriceTry=12857m, Credits=40,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık",  NameTr="İş Yıllık",         PriceUsd=395m,   PriceTry=25757m, Credits=100, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        private readonly List<FgsTradePackage> _packages = new()
+    {
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=336m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=874m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1772m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=75m,    PriceTry=2221m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",       NameTr="Profesyonel Yıllık",PriceUsd=195m,   PriceTry=6708m,  Credits=40,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık",  NameTr="İş Yıllık",         PriceUsd=395m,   PriceTry=13438m, Credits=100, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
         new() { ProductCode="1274710", Alias="credit_10",        Name="10 Kredi",         NameTr="10 Ekstra Kredi",   PriceUsd=10m,    PriceTry=430m,   Credits=10,  DurationDays=0,   MaxInstallment=1,  IsYearly=false, IsCredit=true  },
         new() { ProductCode="1274725", Alias="credit_25",        Name="25 Kredi",         NameTr="25 Ekstra Kredi",   PriceUsd=20m,    PriceTry=860m,   Credits=25,  DurationDays=0,   MaxInstallment=1,  IsYearly=false, IsCredit=true  },
         new() { ProductCode="1274750", Alias="credit_50",        Name="50 Kredi",         NameTr="50 Ekstra Kredi",   PriceUsd=35m,    PriceTry=1505m,  Credits=50,  DurationDays=0,   MaxInstallment=1,  IsYearly=false, IsCredit=true  },
         new() { ProductCode="1247100", Alias="credit_100",       Name="100 Kredi",        NameTr="100 Ekstra Kredi",  PriceUsd=60m,    PriceTry=2580m,  Credits=100, DurationDays=0,   MaxInstallment=1,  IsYearly=false, IsCredit=true  },
     };
+    
 
     public MorparaPaymentService(
         HttpClient httpClient,
