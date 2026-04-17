@@ -82,8 +82,7 @@ public class MorparaPaymentService : IMorparaPaymentService
     private readonly string _baseUrl;
     private readonly string _callbackUrl;
 
-    private readonly List<FgsTradePackage> _packages = new()
-    {
+   
         private readonly List<FgsTradePackage> _packages = new()
     {
         new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=336m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
