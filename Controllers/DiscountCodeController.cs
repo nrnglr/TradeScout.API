@@ -116,7 +116,7 @@ public class DiscountCodeController : ControllerBase
             }
 
             // İndirimli fiyatı USD cinsinden hesapla
-            var originalPrice = package.PriceTry;
+            var originalPrice = package.PriceUsd;
             var discountAmount = originalPrice * discountCode.DiscountPercentage / 100m;
             var discountedPrice = originalPrice - discountAmount;
 

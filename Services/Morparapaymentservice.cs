@@ -134,7 +134,7 @@ public class MorparaPaymentService : IMorparaPaymentService
 
             var conversationId = BuildConversationId(request.UserId);
 
-            decimal finalPrice = package.PriceTry;
+            decimal finalPrice = package.PriceUsd;
             decimal discountPercent = 0;
             if (!string.IsNullOrEmpty(request.DiscountCode))
             {
@@ -143,7 +143,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 if (dc != null)
                 {
                     discountPercent = dc.DiscountPercentage;
-                    finalPrice = Math.Round(package.PriceTry * (1 - discountPercent / 100), 2);
+                    finalPrice = Math.Round(package.PriceUsd * (1 - discountPercent / 100), 2);
                 }
             }
 
@@ -170,7 +170,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 "False",         // VftFlag — büyük F zorunlu
                 installmentStr,
                 amountStr,
-                "949",           // USD
+                "840",           // USD
                 _merchantId,     // PFSubMerchantId
                 _apiKey          // d2VydHl1YXNkZmdoamts (maildeki değer)
             };
@@ -194,7 +194,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                     transactionType = "SALE",
                     installmentCount = installmentInt,
                     amount = amountStr,
-                    currencyCode = "949",
+                    currencyCode = "840",
                     vftFlag = false
                 },
                 extraParameter = new
