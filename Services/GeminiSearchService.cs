@@ -280,7 +280,7 @@ public class GeminiSearchService : IGeminiSearchService
             var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromMinutes(3);
             
-            var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={apiKey}";
+            var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
             
             var requestBody = new
             {
@@ -669,7 +669,7 @@ IMPORTANT: Return ONLY the JSON array, nothing else!";
         var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromMinutes(3); // 3 minute timeout per batch
         
-       var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={apiKey}";
+       var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
         var requestBody = new
         {
             contents = new[]
