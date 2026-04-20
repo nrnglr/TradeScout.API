@@ -91,6 +91,17 @@ public class ScraperController : ControllerBase
                 });
             }
 
+            // MaxResults limitini kontrol et
+            if (user.Role != "Admin" && request.MaxResults > user.MaxResultsPerSearch)
+            {
+                return BadRequest(new
+                {
+                    message = $"Maksimum {user.MaxResultsPerSearch} firma talebinde bulunabilirsiniz.",
+                    maxAllowed = user.MaxResultsPerSearch,
+                    requested = request.MaxResults
+                });
+            }
+
             // Get final search query
             var searchQuery = request.GetSearchQuery();
             var category = request.Category ?? "business";
@@ -429,12 +440,12 @@ public class ScraperController : ControllerBase
             var city = request.City ?? "";
 
             // Validate MaxResults for non-admin users
-            if (user.Role != "Admin" && request.MaxResults > 10)
+            if (user.Role != "Admin" && request.MaxResults > user.MaxResultsPerSearch)
             {
                 return BadRequest(new
                 {
-                    message = "Maksimum 10 firma talebinde bulunabilirsiniz. Admin için limit yoktur.",
-                    maxAllowed = 10,
+                    message = $"Maksimum {user.MaxResultsPerSearch} firma talebinde bulunabilirsiniz.",
+                    maxAllowed = user.MaxResultsPerSearch,
                     requested = request.MaxResults
                 });
             }

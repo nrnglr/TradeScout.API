@@ -889,6 +889,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
         if (package.IsCredit)
         {
             user.Credits += package.Credits;
+            user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
             _logger.LogInformation("💰 Kredi eklendi | UserId={Id} | +{Add} = {Total}", user.Id, package.Credits, user.Credits);
         }
         else

@@ -470,6 +470,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             if (user == null) return;
 
             user.Credits += package.Credits;
+            user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
             if (!package.IsCredit && package.DurationDays > 0)
             {
@@ -479,7 +480,6 @@ public class MorparaPaymentService : IMorparaPaymentService
                 user.MembershipEnd = DateTime.SpecifyKind(baseDate.AddDays(package.DurationDays), DateTimeKind.Utc);
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
-                user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
             }
 
             pending.Status = "SUCCESS";
@@ -526,6 +526,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             if (user == null) return;
 
             user.Credits += package.Credits;
+            user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
             if (!package.IsCredit && package.DurationDays > 0)
             {
@@ -535,7 +536,6 @@ public class MorparaPaymentService : IMorparaPaymentService
                 user.MembershipEnd = DateTime.SpecifyKind(baseDate.AddDays(package.DurationDays), DateTimeKind.Utc);
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
-                user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
             }
 
             if (pending != null)
