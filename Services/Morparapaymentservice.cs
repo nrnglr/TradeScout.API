@@ -164,42 +164,41 @@ public class MorparaPaymentService : IMorparaPaymentService
                 returnUrl,
                 failUrl,
                 "HOSTEDPAYMENT",
-                "tr",
+                "en",            // Döviz işlemlerde language "en" olmalı
                 "CARD",
                 "SALE",
                 "False",         // VftFlag — büyük F zorunlu
                 installmentStr,
                 amountStr,
                 "840",           // USD
-                _merchantId,     // PFSubMerchantId
-                _apiKey          // d2VydHl1YXNkZmdoamts (maildeki değer)
+                "",              // PFSubMerchantId — dövizde boş
+                _apiKey
             };
             var sign = CalculateDynamicSign(signValues);
 
-            // Payload — apiKey body'e de eklendi
             var payload = new
             {
-                merchantId = _merchantId,
-                returnUrl = returnUrl,
-                failUrl = failUrl,
-                callbackUrl = _callbackUrl,
-                paymentMethod = "HOSTEDPAYMENT",
+                merchantId            = _merchantId,
+                returnUrl             = returnUrl,
+                failUrl               = failUrl,
+                callbackUrl           = _callbackUrl,
+                paymentMethod         = "HOSTEDPAYMENT",
                 paymentInstrumentType = "CARD",
-                language = "tr",
-                conversationId = conversationId,
-                apiKey = _apiKey,
-                sign = sign,
-                transactionDetails = new
+                language              = "en",            // Döviz işlemlerde "en"
+                conversationId        = conversationId,
+                apiKey                = _apiKey,
+                sign                  = sign,
+                transactionDetails    = new
                 {
-                    transactionType = "SALE",
+                    transactionType  = "SALE",
                     installmentCount = installmentInt,
-                    amount = amountStr,
-                    currencyCode = "840",
-                    vftFlag = false
+                    amount           = amountStr,
+                    currencyCode     = "840",
+                    vftFlag          = false
                 },
                 extraParameter = new
                 {
-                    pFSubMerchantId = _merchantId
+                    pFSubMerchantId = ""  // Dövizde boş gönderilmeli
                 }
             };
 
@@ -470,7 +469,6 @@ public class MorparaPaymentService : IMorparaPaymentService
             if (user == null) return;
 
             user.Credits += package.Credits;
-            user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
             if (!package.IsCredit && package.DurationDays > 0)
             {
@@ -480,6 +478,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 user.MembershipEnd = DateTime.SpecifyKind(baseDate.AddDays(package.DurationDays), DateTimeKind.Utc);
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
+                user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
             }
 
             pending.Status = "SUCCESS";
@@ -526,7 +525,6 @@ public class MorparaPaymentService : IMorparaPaymentService
             if (user == null) return;
 
             user.Credits += package.Credits;
-            user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
             if (!package.IsCredit && package.DurationDays > 0)
             {
@@ -536,6 +534,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 user.MembershipEnd = DateTime.SpecifyKind(baseDate.AddDays(package.DurationDays), DateTimeKind.Utc);
                 user.PackageType = package.Name;
                 user.MembershipStart = now;
+                user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
             }
 
             if (pending != null)
