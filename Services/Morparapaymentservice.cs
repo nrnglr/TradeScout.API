@@ -167,7 +167,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 "en",            // Döviz işlemlerde language "en" olmalı
                 "CARD",
                 "SALE",
-                "False",         // VftFlag — büyük F zorunlu
+                "false",         // VftFlag — payload ile tutarlı
                 installmentStr,
                 amountStr,
                 "840",           // USD
@@ -415,15 +415,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             // (CheckPayment sign sorunu çözülene kadar geçici çözüm)
             _logger.LogInformation("✅ PENDING kayıt bulundu, aktive ediliyor | ConvId={Id} | UserId={Uid}",
                 conversationId, pending.UserId);
-            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-5))
-            {
-                return new PaymentVerificationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Ödeme süresi dolmuş, lütfen tekrar deneyin"
-                };
-            }
-            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-5))
+            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-30))
             {
                 return new PaymentVerificationResult
                 {
