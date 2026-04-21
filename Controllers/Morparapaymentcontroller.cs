@@ -45,6 +45,7 @@ public class MorparaPaymentController : ControllerBase
             UserId       = userId,
             Installment  = body.Installment > 0 ? body.Installment : 1,
             DiscountCode = body.DiscountCode,
+            Currency     = body.Currency ?? "TRY",
         });
 
         if (!result.Success)
@@ -186,6 +187,7 @@ public class MorparaInitRequest
     public string? ProductCode  { get; set; }
     public int     Installment  { get; set; } = 1;
     public string? DiscountCode { get; set; }
+    public string  Currency     { get; set; } = "TRY";
 }
 
 public class MorparaVerifyRequest
