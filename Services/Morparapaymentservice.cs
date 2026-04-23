@@ -86,7 +86,7 @@ public class MorparaPaymentService : IMorparaPaymentService
    
         private readonly List<FgsTradePackage> _packages = new()
     {
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=336m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=874m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1772m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=49.50m, PriceTry=2221m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
