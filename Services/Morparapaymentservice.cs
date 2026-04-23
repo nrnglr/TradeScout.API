@@ -419,11 +419,8 @@ public class MorparaPaymentService : IMorparaPaymentService
                 return new PaymentVerificationResult { Success = false, ErrorMessage = "Ödeme kaydı bulunamadı" };
             }
 
-            // PENDING kaydı var — CheckPayment olmadan direkt aktive et
-            // (CheckPayment sign sorunu çözülene kadar geçici çözüm)
-            _logger.LogInformation("✅ PENDING kayıt bulundu, aktive ediliyor | ConvId={Id} | UserId={Uid}",
-                conversationId, pending.UserId);
-            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-30))
+            // Zaman aşımı kontrolü — 5 dakika
+            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-5))
             {
                 return new PaymentVerificationResult
                 {
@@ -431,6 +428,36 @@ public class MorparaPaymentService : IMorparaPaymentService
                     ErrorMessage = "Ödeme süresi dolmuş, lütfen tekrar deneyin"
                 };
             }
+
+            // CheckPayment ile ödemeyi doğrula
+            var checkResult = await CheckPaymentAsync(conversationId);
+
+            if (checkResult != null)
+            {
+                bool isApproved = checkResult.ResponseCode == "B0000"
+                               && checkResult.ResponseDescription == "Approved";
+
+                if (!isApproved)
+                {
+                    _logger.LogWarning("⚠️ CheckPayment başarısız | ConvId={Id} | Code={Code}",
+                        conversationId, checkResult.ResponseCode);
+                    return new PaymentVerificationResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Ödeme başarısız: {checkResult.ResponseDescription}"
+                    };
+                }
+
+                _logger.LogInformation("✅ CheckPayment onayladı, aktive ediliyor | ConvId={Id}", conversationId);
+            }
+            else
+            {
+                // CheckPayment başarısız olursa PENDING kaydıyla devam et (geçici güvenlik ağı)
+                _logger.LogWarning("⚠️ CheckPayment sorgulanamadı, PENDING ile devam ediliyor | ConvId={Id}", conversationId);
+            }
+
+            _logger.LogInformation("✅ PENDING kayıt bulundu, aktive ediliyor | ConvId={Id} | UserId={Uid}",
+                conversationId, pending.UserId);
 
             await ActivateMembershipFromPendingAsync(pending);
 
