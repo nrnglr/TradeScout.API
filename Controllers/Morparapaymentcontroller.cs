@@ -137,7 +137,7 @@ public class MorparaPaymentController : ControllerBase
 
     // ─── POST /api/payment/morpara/verify ─────────────────────────────────────
     [HttpPost("verify")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<IActionResult> Verify([FromBody] MorparaVerifyRequest body)
     {
         if (string.IsNullOrWhiteSpace(body.ConversationId))
