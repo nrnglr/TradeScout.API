@@ -235,7 +235,7 @@ public class ToslaPaymentService : IToslaPaymentService
 
         _baseUrl = (Environment.GetEnvironmentVariable("TOSLA_BASE_URL")
             ?? configuration["ToslaSettings:BaseUrl"]
-            ?? "https://entegrasyon.tosla.com/api/Payment").Trim().TrimEnd('/');
+            ?? "https://app.tosla.com/api/Payment").Trim().TrimEnd('/');
 
         _callbackUrl = (Environment.GetEnvironmentVariable("TOSLA_CALLBACK_URL")
             ?? configuration["ToslaSettings:CallbackUrl"]
