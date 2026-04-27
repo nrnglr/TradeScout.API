@@ -242,7 +242,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             }
 
             await SavePendingPaymentAsync(conversationId, request.UserId, package,
-                finalPrice, request.DiscountCode, discountPercent);
+                finalPrice, request.DiscountCode, discountPercent, request.Currency ?? "USD");
 
             _logger.LogInformation("✅ MORPARA başarılı | ConvId={Id} | Url={Url}", conversationId, paymentUrl);
 
@@ -419,8 +419,8 @@ public class MorparaPaymentService : IMorparaPaymentService
                 return new PaymentVerificationResult { Success = false, ErrorMessage = "Ödeme kaydı bulunamadı" };
             }
 
-            // Zaman aşımı kontrolü — 5 dakika
-            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-5))
+            // Zaman aşımı kontrolü — 30 dakika
+            if (pending.PaymentDate < DateTime.UtcNow.AddMinutes(-30))
             {
                 return new PaymentVerificationResult
                 {
@@ -655,7 +655,7 @@ public class MorparaPaymentService : IMorparaPaymentService
     }
 
     private async Task SavePendingPaymentAsync(string conversationId, string userId,
-        FgsTradePackage package, decimal amount, string? discountCode, decimal discountPercent)
+        FgsTradePackage package, decimal amount, string? discountCode, decimal discountPercent, string currency = "USD")
     {
         try
         {
@@ -676,7 +676,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 PackageName = package.Name,
                 Amount = amount,
                 FinalAmount = amount,
-                Currency = "USD",
+                Currency = currency.ToUpper(),
                 Status = "PENDING",
                 CreditsAdded = package.Credits,
                 PaymentDate = DateTime.UtcNow,

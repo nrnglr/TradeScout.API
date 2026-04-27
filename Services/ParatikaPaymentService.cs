@@ -174,13 +174,13 @@ public class ParatikaPaymentService : IParatikaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // Aylık abonelikler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",        PriceUsd=15m,  PriceTry=645m,     Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",      PriceUsd=39m,  PriceTry=1677m,  Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",               PriceUsd=79m,  PriceTry=3397m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=336m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=874m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1772m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         // Yıllık abonelikler
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık", PriceUsd=99m,  PriceTry=4257m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",       NameTr="Profesyonel Yıllık",PriceUsd=299m, PriceTry=12857m, Credits=40,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık",  NameTr="İş Yıllık",       PriceUsd=599m, PriceTry=25757m, Credits=100, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=49.50m, PriceTry=2221m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",       NameTr="Profesyonel Yıllık",PriceUsd=149.50m,PriceTry=6708m,  Credits=40,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık",  NameTr="İş Yıllık",         PriceUsd=299.50m,PriceTry=13438m, Credits=100, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
         // Extra kredi - tek seferlik, recurring YOK
         new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=430m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
         new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=860m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
