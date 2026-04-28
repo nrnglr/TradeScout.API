@@ -63,14 +63,14 @@ public class ToslaPaymentService : IToslaPaymentService
             Alias          = "starter_monthly",
             Name           = "Starter",
             NameTr         = "Başlangıç",
-            PriceUsd       = 15m,
-            PriceTry       = 645m,
+            PriceUsd       = 7.50m,
+            PriceTry       = 336m,
             Credits        = 10,
             DurationDays   = 30,
             MaxInstallment = 1,
             IsYearly       = false,
             IsCredit       = false,
-            Description    = "Starter Aylık Üyelik - TEST 1TL"
+            Description    = "Starter Aylık Üyelik"
         },
         new()
         {
@@ -78,14 +78,14 @@ public class ToslaPaymentService : IToslaPaymentService
             Alias          = "pro_monthly",
             Name           = "Pro",
             NameTr         = "Profesyonel",
-            PriceUsd       = 39m,
-            PriceTry       = 1677m,
+            PriceUsd       = 19.50m,
+            PriceTry       = 874m,
             Credits        = 40,
             DurationDays   = 30,
             MaxInstallment = 1,
             IsYearly       = false,
             IsCredit       = false,
-            Description    = "Pro Aylık Üyelik - $39/ay"
+            Description    = "Pro Aylık Üyelik"
         },
         new()
         {
@@ -93,14 +93,14 @@ public class ToslaPaymentService : IToslaPaymentService
             Alias          = "business_monthly",
             Name           = "Business",
             NameTr         = "İş",
-            PriceUsd       = 79m,
-            PriceTry       = 3397m,
+            PriceUsd       = 39.50m,
+            PriceTry       = 1772m,
             Credits        = 100,
             DurationDays   = 30,
             MaxInstallment = 1,
             IsYearly       = false,
             IsCredit       = false,
-            Description    = "Business Aylık Üyelik - $79/ay"
+            Description    = "Business Aylık Üyelik"
         },
 
         // ── Yıllık paketler (9 veya 12 taksit seçeneği var) ─────────────────
