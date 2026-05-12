@@ -140,7 +140,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             decimal basePrice = isUsd ? package.PriceUsd : package.PriceTry;
             string currencyCode = isUsd ? "840" : "949";
             string language = isUsd ? "en" : "tr";
-            string pfSubMerchantId = isUsd ? "" : _merchantId;
+            string pfSubMerchantId = _merchantId; // TL ve USD için aynı
 
             decimal finalPrice = basePrice;
             decimal discountPercent = 0;

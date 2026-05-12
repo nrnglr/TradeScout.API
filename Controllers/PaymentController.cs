@@ -124,14 +124,14 @@ public class PaymentController : ControllerBase
                 // Ama genelde Tosla kendi 3D Secure sayfasından kullanıcıyı yönlendirir
                 
                 // Ödeme başarılı → kullanıcıyı success sayfasına yönlendir
-                return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}");
+                return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}&gateway=tosla");
             }
 
             _logger.LogWarning("❌ Callback işlendi - FAILED | OrderId: {OrderId} | Code: {Code}", 
                 callback.OrderId, callback.BankResponseCode);
             
             // Ödeme başarısız → failed sayfasına yönlendir
-            return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}");
+            return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}&gateway=tosla");
         }
         catch (Exception ex)
         {

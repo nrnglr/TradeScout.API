@@ -100,13 +100,13 @@ public async Task<IActionResult> Callback([FromForm] IFormCollection form)
     string frontendUrl;
     if (result.Success)
     {
-        frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}";
+        frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}&gateway=paratika";
     }
     else
     {
         _logger.LogError("Ödeme başarısız veya Hash hatalı: {Msg}", result.ErrorMessage);
         var errorCode = Uri.EscapeDataString(result.BankErrorCode ?? "HASH_ERROR");
-        frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}";
+        frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}&gateway=paratika";
     }
 
     // Paratika POST Callback attığı için HTTP 302 Redirect bazen tarayıcıda sorun yaratabilir.
