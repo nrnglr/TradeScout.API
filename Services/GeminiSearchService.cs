@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Net.Http;
 using System.Text;
 using System.Collections.Concurrent;
+using System.Linq; // .Last() gibi sorgular için eklendi
 using TradeScout.API.DTOs;
 
 namespace TradeScout.API.Services;
@@ -77,44 +78,29 @@ public class GeminiSearchService : IGeminiSearchService
 
     /// <summary>
     /// Load API keys from environment and configuration
-    /// Supports: GEMINI_API_KEY, GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.
-    /// Or: GeminiSettings:ApiKeys array in appsettings.json
     /// </summary>
     private List<string> LoadApiKeys()
     {
         var keys = new List<string>();
 
-        // 1. Check single environment variable
         var singleKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-        if (!string.IsNullOrEmpty(singleKey))
-        {
-            keys.Add(singleKey);
-        }
+        if (!string.IsNullOrEmpty(singleKey)) keys.Add(singleKey);
 
-        // 2. Check numbered environment variables (GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.)
         for (int i = 1; i <= 20; i++)
         {
             var key = Environment.GetEnvironmentVariable($"GEMINI_API_KEY_{i}");
-            if (!string.IsNullOrEmpty(key) && !keys.Contains(key))
-            {
-                keys.Add(key);
-            }
+            if (!string.IsNullOrEmpty(key) && !keys.Contains(key)) keys.Add(key);
         }
 
-        // 3. Check appsettings.json for array of keys
         var configKeys = _configuration.GetSection("GeminiSettings:ApiKeys").Get<string[]>();
         if (configKeys != null)
         {
             foreach (var key in configKeys)
             {
-                if (!string.IsNullOrEmpty(key) && !keys.Contains(key))
-                {
-                    keys.Add(key);
-                }
+                if (!string.IsNullOrEmpty(key) && !keys.Contains(key)) keys.Add(key);
             }
         }
 
-        // 4. Fallback to single key in appsettings
         var configSingleKey = _configuration["GeminiSettings:ApiKey"];
         if (!string.IsNullOrEmpty(configSingleKey) && !keys.Contains(configSingleKey))
         {
@@ -134,28 +120,19 @@ public class GeminiSearchService : IGeminiSearchService
             var now = DateTime.UtcNow;
             var oneMinuteAgo = now.AddMinutes(-1);
 
-            // Try to find an available key
             for (int attempts = 0; attempts < _apiKeys.Count; attempts++)
             {
                 _currentKeyIndex = (_currentKeyIndex + 1) % _apiKeys.Count;
                 var key = _apiKeys[_currentKeyIndex];
 
-                // Check cooldown
                 if (_apiKeyLastUsed.TryGetValue(key, out var lastUsed))
                 {
-                    if ((now - lastUsed).TotalSeconds < COOLDOWN_SECONDS && _apiKeys.Count > 1)
-                    {
-                        continue; // Try next key
-                    }
+                    if ((now - lastUsed).TotalSeconds < COOLDOWN_SECONDS && _apiKeys.Count > 1) continue;
                 }
 
-                // Check rate limit (reset count if older than 1 minute)
                 _apiKeyRequestCount.AddOrUpdate(key, 1, (k, count) =>
                 {
-                    if (_apiKeyLastUsed.TryGetValue(k, out var last) && last < oneMinuteAgo)
-                    {
-                        return 1; // Reset count
-                    }
+                    if (_apiKeyLastUsed.TryGetValue(k, out var last) && last < oneMinuteAgo) return 1;
                     return count + 1;
                 });
 
@@ -163,25 +140,18 @@ public class GeminiSearchService : IGeminiSearchService
                 if (currentCount > MAX_REQUESTS_PER_KEY_PER_MINUTE && _apiKeys.Count > 1)
                 {
                     _logger.LogWarning("⚠️ API key {Index} reached rate limit ({Count} requests/min)", _currentKeyIndex, currentCount);
-                    continue; // Try next key
+                    continue;
                 }
 
-                // Update last used time
                 _apiKeyLastUsed[key] = now;
-
                 return key;
             }
 
-            // If all keys are rate limited, use the first one anyway
             _logger.LogWarning("⚠️ All API keys are rate limited. Using key 0 anyway.");
             return _apiKeys[0];
         }
     }
 
-
-    /// <summary>
-    /// Get current API key pool status
-    /// </summary>
     public (int TotalKeys, int AvailableKeys) GetApiKeyPoolStatus()
     {
         var now = DateTime.UtcNow;
@@ -190,25 +160,11 @@ public class GeminiSearchService : IGeminiSearchService
         var availableKeys = _apiKeys.Count(key =>
         {
             var count = _apiKeyRequestCount.GetOrAdd(key, 0);
-            if (_apiKeyLastUsed.TryGetValue(key, out var lastUsed) && lastUsed < oneMinuteAgo)
-            {
-                return true; // Count reset
-            }
+            if (_apiKeyLastUsed.TryGetValue(key, out var lastUsed) && lastUsed < oneMinuteAgo) return true;
             return count < MAX_REQUESTS_PER_KEY_PER_MINUTE;
         });
 
         return (_apiKeys.Count, availableKeys);
-    }
-    public async Task<bool> IsWebsiteLive(string url)
-    {
-        try
-        {
-            using var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(5);
-            var response = await client.GetAsync(url);
-            return response.IsSuccessStatusCode;
-        }
-        catch { return false; }
     }
 
     public async Task<List<BusinessDto>> SearchBusinessesAsync(
@@ -220,47 +176,55 @@ public class GeminiSearchService : IGeminiSearchService
     {
         try
         {
-            _logger.LogInformation("🤖 Gemini AI Search başlatılıyor: {Sector} - {City}, Hedef: {MaxResults}",
-                sector, city, maxResults);
+            _logger.LogInformation("🚀 TradeScout Çoklu Arama Modu Başlatıldı: {Sector} - {City}", sector, city);
 
             var location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
 
-            int batchSize = 50;
-            int batchCount = (int)Math.Ceiling((double)maxResults / batchSize);
-
-            // Eğer 6 anahtarımız varsa 6 paralel batch atabiliriz
-            batchCount = Math.Min(batchCount, _apiKeys.Count > 0 ? _apiKeys.Count * 2 : 5);
-
-            _logger.LogInformation("🚀 {BatchCount} PARALEL istek yapılacak (batch size: {BatchSize})",
-                batchCount, batchSize);
-
-            var searchTasks = new List<Task<List<BusinessDto>>>();
-
-            for (int i = 0; i < batchCount; i++)
+            // YENİ: 3 farklı arama stratejisi ile paralel çağır
+            var tasks = new[]
             {
-                int offset = i * batchSize;
-                int targetCount = Math.Min(batchSize, maxResults - offset);
-                var prompt = BuildSearchPromptWithOffset(sector, location, targetCount, offset, i);
+                CallGeminiApiAsync(BuildSearchPromptWithOffset(sector, location, maxResults, 0, 0), sector, city, country, 0, cancellationToken),
+                CallGeminiApiAsync(BuildSearchPromptWithOffset(sector + " manufacturer exporter", location, maxResults, 0, 1), sector, city, country, 1, cancellationToken),
+                CallGeminiApiAsync(BuildSearchPromptWithOffset(sector + " wholesaler supplier", location, maxResults, 0, 2), sector, city, country, 2, cancellationToken),
+                CallGeminiApiAsync(BuildSearchPromptWithOffset(sector + " üreticileri fabrikası toptancıları", location, maxResults, 0, 3), sector, city, country, 3, cancellationToken),
+            };
 
-                // Bekleme (await) yok! Bütün task'leri aynı anda listeye ekleyip fırlatıyoruz
-                searchTasks.Add(CallGeminiApiAsync(prompt, sector, city, country, i, cancellationToken));
-            }
+            await Task.WhenAll(tasks);
 
-            // Bütün paralel isteklerin aynı anda bitmesini bekle
-            var resultsArray = await Task.WhenAll(searchTasks);
-
-            // Sonuçları birleştir ve duplicate'leri kaldır
-            var allBusinesses = resultsArray
-                .SelectMany(x => x)
-                .GroupBy(b => b.BusinessName?.ToLower()?.Trim())
-                .Where(g => !string.IsNullOrEmpty(g.Key))
+            // Bütün görevlerden gelen sonuçları birleştir, benzersiz olanları al
+            var allFound = tasks.SelectMany(t => t.Result)
+                .Where(b => !string.IsNullOrEmpty(b.Website)) // Sadece web sitesi olanları al
+                .GroupBy(b => b.Website?.ToLower())
                 .Select(g => g.First())
-                .Take(maxResults)
                 .ToList();
 
-            _logger.LogInformation("🎉 Toplam {Count} benzersiz işletme bulundu (hedef: {MaxResults})",
-                allBusinesses.Count, maxResults);
-            return allBusinesses;
+            _logger.LogInformation("🔍 Gemini toplam {Count} benzersiz sonuç döndürdü. Şimdi web siteleri doğrulanıyor...", allFound.Count);
+
+            var verifiedBusinesses = new List<BusinessDto>();
+            using var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+
+            foreach (var business in allFound)
+            {
+                // GERÇEKLİK KONTROLÜ
+                bool isLive = await CheckIfWebsiteIsReal(client, business.Website!);
+
+                if (isLive)
+                {
+                    business.ConfidenceScore = 0.99m;
+                    verifiedBusinesses.Add(business);
+                    _logger.LogInformation("✅ Doğrulandı: {Website}", business.Website);
+                }
+                else
+                {
+                    _logger.LogWarning("❌ Uydurma veya Kapalı Site Elendi: {Website}", business.Website);
+                }
+
+                if (verifiedBusinesses.Count >= maxResults) break;
+            }
+
+            _logger.LogInformation("🎉 Filtreleme Sonrası: {Count} GERÇEK işletme sisteme alındı.", verifiedBusinesses.Count);
+            return verifiedBusinesses;
         }
         catch (Exception ex)
         {
@@ -268,6 +232,27 @@ public class GeminiSearchService : IGeminiSearchService
             throw;
         }
     }
+
+    // YENİ VE GÜÇLENDİRİLMİŞ URL KONTROL METODU
+    private async Task<bool> CheckIfWebsiteIsReal(HttpClient client, string url)
+    {
+        try
+        {
+            if (!url.StartsWith("http")) url = "https://" + url;
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; TradeScout/1.0)");
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            // 200, 301, 302, 403, 405, 406 hepsi gerçek site demektir
+            var validCodes = new[] { 200, 301, 302, 403, 405, 406 };
+            return validCodes.Contains((int)response.StatusCode);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Tek bir Gemini API çağrısı yapar
     /// </summary>
@@ -285,7 +270,6 @@ public class GeminiSearchService : IGeminiSearchService
         {
             try
             {
-                // Get next available API key from pool (load balancing)
                 var apiKey = GetNextApiKey();
                 var keyIndex = _apiKeys.IndexOf(apiKey);
 
@@ -298,14 +282,11 @@ public class GeminiSearchService : IGeminiSearchService
                 {
                     contents = new[]
                     {
-                    new
-                    {
-                        parts = new[]
+                        new
                         {
-                            new { text = prompt }
+                            parts = new[] { new { text = prompt } }
                         }
-                    }
-                },
+                    },
                     generationConfig = new
                     {
                         temperature = 0.1,
@@ -313,11 +294,7 @@ public class GeminiSearchService : IGeminiSearchService
                     }
                 };
 
-                var jsonContent = new StringContent(
-                    JsonSerializer.Serialize(requestBody),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
 
                 _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex}, attempt {Attempt})...",
                     batchIndex, keyIndex, attempt);
@@ -327,22 +304,19 @@ public class GeminiSearchService : IGeminiSearchService
 
                 if (!httpResponse.IsSuccessStatusCode)
                 {
-                    // 429 = Rate limit - bekle ve tekrar dene
                     if ((int)httpResponse.StatusCode == 429 && attempt < maxRetries)
                     {
-                        int waitSeconds = attempt * 15; // 15s, 30s
+                        int waitSeconds = attempt * 15;
                         _logger.LogWarning("⚠️ Batch #{BatchIndex} - Rate limit (429), {Wait}s bekleniyor (deneme {Attempt}/{Max})...",
                             batchIndex, waitSeconds, attempt, maxRetries);
                         await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
                         continue;
                     }
 
-                    _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}",
-                        batchIndex, responseContent);
+                    _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}", batchIndex, responseContent);
                     return new List<BusinessDto>();
                 }
 
-                // Parse response
                 var jsonResponse = JsonDocument.Parse(responseContent);
                 var text = jsonResponse.RootElement
                     .GetProperty("candidates")[0]
@@ -358,8 +332,7 @@ public class GeminiSearchService : IGeminiSearchService
                 }
 
                 var businesses = ParseGeminiResponse(text, sector, city, country);
-                _logger.LogInformation("✅ Batch #{BatchIndex} - {Count} işletme bulundu",
-                    batchIndex, businesses.Count);
+                _logger.LogInformation("✅ Batch #{BatchIndex} - {Count} işletme bulundu", batchIndex, businesses.Count);
 
                 return businesses;
             }
@@ -378,84 +351,69 @@ public class GeminiSearchService : IGeminiSearchService
                 }
                 return new List<BusinessDto>();
             }
-        } // end retry loop
+        }
 
         return new List<BusinessDto>();
     }
 
-    /// <summary>
-    /// Offset'li arama prompt'u oluşturur (farklı sonuçlar için)
-    /// </summary>
+    // YENİ GENİŞLETİLMİŞ PROMPT MİMARİSİ
     private string BuildSearchPromptWithOffset(string sector, string location, int targetCount, int offset, int batchIndex)
     {
-        var searchVariants = new[] { "industrial ", "wholesale ", "manufacturer ", "distributor ", "exporter " };
-        var variant = searchVariants[Math.Min(batchIndex, searchVariants.Length - 1)];
+        return $@"
+# ROLE
+You are a Senior B2B Trade Intelligence Specialist. Find REAL businesses.
 
-        return $@"TASK: You are a Senior International Trade Intelligence Specialist for ""TradeScout"".
-Your mission is to find high-accuracy B2B targets in the specified sector and location.
+# GOAL
+Find {targetCount} real, active businesses in: {sector} / {location}
 
-SECTOR: {variant}{sector}
-LOCATION: {location}
-TARGET: EXACTLY {targetCount} verified businesses.
+# SEARCH STRATEGY (USE ALL OF THESE):
+1. Search Google: site:linkedin.com/company ""{sector}"" ""{location}""
+2. Search trade directories: kompass.com, europages.com, alibaba.com for {sector} in {location}  
+3. Search local chambers of commerce and industry associations
+4. Search ""{sector} manufacturer {location}"", ""{sector} exporter {location}"", ""{sector} wholesaler {location}""
+5. Try variations: related industries, suppliers, sub-sectors
 
-STRATEGY (TradeMap & Professional Intelligence Level):
-1. Identify the relevant HS CODES (Harmonized System) for {sector} first.
-2. Search for active manufacturers, exporters, and wholesalers using these HS Codes in {location}.
-3. Prioritize companies listed in official Chambers of Commerce, Trade Directories, and LinkedIn.
-4. VERIFICATION: Verify if the company still exists and handles products related to {sector}.
+# DEEP SEARCH STRATEGY:
+- Do not just list the top 10 most famous companies.
+- Dig deeper into page 2 and page 3 of search results.
+- Look specifically for SMEs (Small and Medium Enterprises) and local industrial zones (OSB).
 
-DATA POINTS TO COLLECT:
-- BusinessName: Legal or official trade name.
-- Email: Official professional email (avoid generic ones if personal decision-maker email is found).
-- ContextualData: A brief 1-sentence summary of their RECENT projects or specific product strengths to be used in personalized emails.
-- ConfidenceScore: Rate the data accuracy from 0.1 to 1.0 based on how official the source is.
+# CRITICAL RULES
+1. Only include companies with a REAL, WORKING website
+2. Email must match website domain
+3. Return as many REAL companies as you can find, up to {targetCount}
+4. Better to return 5 real than 50 fake
 
-FORMATTING RULES:
-- Return ONLY a valid JSON array. No conversational text.
-- Use null for unavailable fields.
-
-JSON STRUCTURE:
+# OUTPUT FORMAT - ONLY JSON ARRAY
 [
   {{
-    ""businessName"": ""Full Company Name"",
-    ""address"": ""Full Physical Address"",
-    ""email"": ""verified-email@company.com"",
+    ""businessName"": ""Company Name"",
+    ""address"": ""City, {location}"",
+    ""email"": ""info@company.com"",
     ""website"": ""https://www.company.com"",
-    ""contextualData"": ""Recently exported sustainable textile products to Europe..."",
-    ""hsCodes"": [""6109"", ""6110""],
-    ""confidenceScore"": 0.95,
+    ""contextualData"": ""One sentence about their products/exports."",
+    ""hsCodes"": [""1234""],
+    ""confidenceScore"": 0.9,
     ""category"": ""{sector}"",
     ""city"": ""{location.Split(',')[0].Trim()}"",
-    ""country"": ""{(location.Contains(",") ? location.Split(',')[1].Trim() : "Turkey")}""
+    ""country"": ""{(location.Contains(",") ? location.Split(',').Last().Trim() : location)}""
   }}
-]
-IMPORTANT: Accuracy is more important than speed. If data is suspected to be fake, do not include it.";
+]";
     }
+
     private List<BusinessDto> ParseGeminiResponse(string responseText, string sector, string city, string? country)
     {
         try
         {
-            // Clean response (remove markdown code blocks if present)
             responseText = responseText.Trim();
 
-            if (responseText.StartsWith("```json"))
-            {
-                responseText = responseText.Substring(7);
-            }
-            else if (responseText.StartsWith("```"))
-            {
-                responseText = responseText.Substring(3);
-            }
+            if (responseText.StartsWith("```json")) responseText = responseText.Substring(7);
+            else if (responseText.StartsWith("```")) responseText = responseText.Substring(3);
 
-            if (responseText.EndsWith("```"))
-            {
-                responseText = responseText.Substring(0, responseText.Length - 3);
-            }
+            if (responseText.EndsWith("```")) responseText = responseText.Substring(0, responseText.Length - 3);
 
             responseText = responseText.Trim();
 
-            // Gemini bazen JSON yerine düz metin (özür metni vb.) döndürebilir
-            // JSON ile başlamıyorsa parse etme, boş dön
             if (!responseText.StartsWith("[") && !responseText.StartsWith("{"))
             {
                 _logger.LogWarning("⚠️ Gemini JSON döndürmedi (düz metin). İçerik: {Preview}",
@@ -463,7 +421,6 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
                 return new List<BusinessDto>();
             }
 
-            // Parse JSON
             var options = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -478,7 +435,6 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
                 return new List<BusinessDto>();
             }
 
-            // Ensure all businesses have category, city, country
             foreach (var business in businesses)
             {
                 business.Category ??= sector;
@@ -493,7 +449,6 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
         {
             _logger.LogError(ex, "❌ JSON parse hatası. Response: {Response}", responseText);
 
-            // Try to extract JSON from text if it's embedded
             var jsonMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[.*\]",
                 System.Text.RegularExpressions.RegexOptions.Singleline);
 
@@ -523,30 +478,19 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
                         return businesses;
                     }
                 }
-                catch
-                {
-                    // Fall through to return empty list
-                }
+                catch { }
             }
 
             return new List<BusinessDto>();
         }
     }
 
-    /// <summary>
-    /// Enrich existing businesses with email/mobile using Gemini AI (batched processing)
-    /// Processes in batches of 60 to prevent 504 Gateway Timeout
-    /// Returns the enriched list and count of successfully enriched records
-    /// </summary>
     public async Task<(List<BusinessDto> EnrichedBusinesses, int SuccessfulCount)> EnrichBusinessesAsync(
         List<BusinessDto> businesses,
         int batchSize = 60,
         CancellationToken cancellationToken = default)
     {
-        if (businesses == null || !businesses.Any())
-        {
-            return (new List<BusinessDto>(), 0);
-        }
+        if (businesses == null || !businesses.Any()) return (new List<BusinessDto>(), 0);
 
         var allResults = new List<BusinessDto>();
         var successfulCount = 0;
@@ -559,22 +503,16 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
 
         for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++)
         {
-            var batch = businesses
-                .Skip(batchIndex * batchSize)
-                .Take(batchSize)
-                .ToList();
+            var batch = businesses.Skip(batchIndex * batchSize).Take(batchSize).ToList();
 
             _logger.LogInformation("📦 Batch {Current}/{Total} PARALEL olarak kuyruğa eklendi ({Count} firma)...",
                 batchIndex + 1, totalBatches, batch.Count);
 
-            // Güvenli wrapper fonksiyon ile task'ı ekle
             enrichmentTasks.Add(SafeEnrichBatchAsync(batch, batchIndex + 1, totalBatches));
         }
 
-        // Tüm zenginleştirme işlemlerini AYNI ANDA çalıştır
         var enrichmentResults = await Task.WhenAll(enrichmentTasks);
 
-        // Biten tüm sonuçları ana listeye ekle
         foreach (var (enrichedBatch, batchSuccessCount) in enrichmentResults)
         {
             allResults.AddRange(enrichedBatch);
@@ -587,9 +525,6 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
         return (allResults, successfulCount);
     }
 
-    /// <summary>
-    /// Paralel çalışırken hataları yakalayan güvenli metod
-    /// </summary>
     private async Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)> SafeEnrichBatchAsync(List<BusinessDto> batch, int currentBatch, int totalBatches)
     {
         try
@@ -601,46 +536,38 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "⚠️ Batch {Current}/{Total} başarısız. Original data kullanılıyor.", currentBatch, totalBatches);
-            return (batch, 0); // Çökmesini engelle, boş verilerle devam et
+            return (batch, 0);
         }
     }
-    /// <summary>
-    /// Process a single batch of businesses for enrichment
-    /// </summary>
-    private async Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)> EnrichBatchAsync(
-        List<BusinessDto> batch)
+
+    private async Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)> EnrichBatchAsync(List<BusinessDto> batch)
     {
         var prompt = BuildEnrichmentPrompt(batch);
-
-        // Get next available API key from pool (load balancing)
         var apiKey = GetNextApiKey();
-        var keyIndex = _apiKeys.IndexOf(apiKey);
 
         var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromMinutes(3); // 3 minute timeout per batch
+        httpClient.Timeout = TimeSpan.FromMinutes(3);
 
-        var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
+        var apiUrl = $"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){apiKey}";
         var requestBody = new
         {
             contents = new[]
+     {
+        new { parts = new[] { new { text = prompt } } }
+    },
+            // BU KISMI EKLİYORUZ (Google Arama Motorunu Kullanması İçin)
+            tools = new[]
+     {
+        new { googleSearch = new { } }
+    },
+            generationConfig = new
             {
-                new
-                {
-                    parts = new[]
-                    {
-                        new { text = prompt }
-                    }
-                }
+                temperature = 0.2, // Biraz daha fazla çeşitlilik (0.1'den 0.2'ye çıkardık)
+                responseMimeType = "application/json"
             }
         };
 
-        var jsonContent = new StringContent(
-            JsonSerializer.Serialize(requestBody),
-            Encoding.UTF8,
-            "application/json"
-        );
-
-        // NO cancellation token - let the request complete
+        var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
         var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
         var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
@@ -650,7 +577,6 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
             throw new Exception($"Gemini API failed: {responseContent}");
         }
 
-        // Parse response
         var jsonResponse = JsonDocument.Parse(responseContent);
         var text = jsonResponse.RootElement
             .GetProperty("candidates")[0]
@@ -665,35 +591,21 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
             return (batch, 0);
         }
 
-        // Parse enriched data
         var enrichedList = ParseEnrichmentResponse(text, batch);
-
-        // Count successful enrichments (has real email or mobile, not "Not Found")
-        var successCount = enrichedList.Count(b =>
-            HasValidContactInfo(b.Email) || HasValidContactInfo(b.Mobile));
+        var successCount = enrichedList.Count(b => HasValidContactInfo(b.Email) || HasValidContactInfo(b.Mobile));
 
         return (enrichedList, successCount);
     }
 
-    /// <summary>
-    /// Check if contact info is valid (not null, not empty, not "Not Found")
-    /// </summary>
     private bool HasValidContactInfo(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
+        if (string.IsNullOrWhiteSpace(value)) return false;
 
         var lowerValue = value.ToLowerInvariant().Trim();
 
-        // Check for "Not Found" variations
-        if (lowerValue.Contains("not found") ||
-            lowerValue.Contains("notfound") ||
-            lowerValue.Contains("bulunamadı") ||
-            lowerValue.Contains("yok") ||
-            lowerValue == "n/a" ||
-            lowerValue == "na" ||
-            lowerValue == "-" ||
-            lowerValue == "null")
+        if (lowerValue.Contains("not found") || lowerValue.Contains("notfound") ||
+            lowerValue.Contains("bulunamadı") || lowerValue.Contains("yok") ||
+            lowerValue == "n/a" || lowerValue == "na" || lowerValue == "-" || lowerValue == "null")
         {
             return false;
         }
@@ -701,29 +613,27 @@ IMPORTANT: Accuracy is more important than speed. If data is suspected to be fak
         return true;
     }
 
-    /// <summary>
-    /// Build enrichment prompt for a batch of businesses
-    /// </summary>
     private string BuildEnrichmentPrompt(List<BusinessDto> batch)
+{
+    var businessList = new StringBuilder();
+    for (int i = 0; i < batch.Count; i++)
     {
-        var businessList = new StringBuilder();
-        for (int i = 0; i < batch.Count; i++)
-        {
-            var b = batch[i];
-            businessList.AppendLine($"{i + 1}. \"{b.BusinessName}\" - Web: {b.Website} - Loc: {b.Address ?? b.City}");
-        }
+        var b = batch[i];
+        businessList.AppendLine($"{i + 1}. \"{b.BusinessName}\" - Web: {b.Website} - Loc: {b.Address ?? b.City}");
+    }
 
-        return $@"TASK: Deep Research & Cold Email Personalization Engine.
-Find specific contact persons and recent company activities for the following leads.
+    return $@"TASK: Deep Research & Cold Email Personalization Engine.
+Find specific contact persons, official phone numbers, social media profiles, and recent company activities for the following leads.
 
 BUSINESSES:
 {businessList}
 
 INSTRUCTIONS:
 1. Find the Decision Maker's name (CEO, Export Manager, or Procurement Lead) if possible.
-2. Find the most direct email address.
-3. Extract a ""Trigger Event"" (e.g., ""Won an award in 2025"", ""Expanded to German market"", ""New production line for organic cotton""). 
-4. This data will be used to write non-robotic, high-conversion B2B emails.
+2. Find the most direct official email address.
+3. Find their official Phone/Mobile number (including country code).
+4. Find their official LinkedIn, Instagram, or Facebook company profile link.
+5. Extract a ""Trigger Event"" (e.g., ""Won an award in 2025"", ""Expanded to German market""). 
 
 JSON FORMAT:
 [
@@ -732,59 +642,42 @@ JSON FORMAT:
     ""decisionMaker"": ""John Doe - Export Manager"",
     ""email"": ""j.doe@company.com"",
     ""triggerEvent"": ""Their recent participation in the Anuga Fair 2024"",
-    ""mobile"": ""Verified phone or null""
+    ""mobile"": ""+90 555 123 4567"",
+    ""socialMedia"": ""https://www.linkedin.com/company/example""
   }}
 ]
 
-CRITICAL: Do NOT hallucinate. If you can't find a name or trigger event, return null.";
-    }
-
-    /// <summary>
-    /// Parse enrichment response and merge with original data
-    /// </summary>
+CRITICAL: Do NOT hallucinate. If you can't find a specific data point, return null for that field.";
+}
     private List<BusinessDto> ParseEnrichmentResponse(string responseText, List<BusinessDto> originalBatch)
     {
         try
         {
-            // Clean response
             responseText = responseText.Trim();
 
-            if (responseText.StartsWith("```json"))
-                responseText = responseText.Substring(7);
-            else if (responseText.StartsWith("```"))
-                responseText = responseText.Substring(3);
-
-            if (responseText.EndsWith("```"))
-                responseText = responseText.Substring(0, responseText.Length - 3);
+            if (responseText.StartsWith("```json")) responseText = responseText.Substring(7);
+            else if (responseText.StartsWith("```")) responseText = responseText.Substring(3);
+            if (responseText.EndsWith("```")) responseText = responseText.Substring(0, responseText.Length - 3);
 
             responseText = responseText.Trim();
 
-            // Parse JSON
             var enrichments = JsonSerializer.Deserialize<List<EnrichmentResult>>(responseText, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
 
-            if (enrichments == null)
-                return originalBatch;
+            if (enrichments == null) return originalBatch;
 
-            // Merge enrichment data with original businesses
             foreach (var enrichment in enrichments)
             {
-                var index = enrichment.Index - 1; // Convert to 0-based
+                var index = enrichment.Index - 1;
                 if (index >= 0 && index < originalBatch.Count)
                 {
                     var business = originalBatch[index];
 
-                    // Only update if we got valid data
-                    if (HasValidContactInfo(enrichment.Email))
-                        business.Email = enrichment.Email;
-
-                    if (HasValidContactInfo(enrichment.Mobile))
-                        business.Mobile = enrichment.Mobile;
-
-                    if (HasValidContactInfo(enrichment.SocialMedia))
-                        business.SocialMedia = enrichment.SocialMedia;
+                    if (HasValidContactInfo(enrichment.Email)) business.Email = enrichment.Email;
+                    if (HasValidContactInfo(enrichment.Mobile)) business.Mobile = enrichment.Mobile;
+                    if (HasValidContactInfo(enrichment.SocialMedia)) business.SocialMedia = enrichment.SocialMedia;
                 }
             }
 
@@ -797,9 +690,6 @@ CRITICAL: Do NOT hallucinate. If you can't find a name or trigger event, return 
         }
     }
 
-    /// <summary>
-    /// Helper class for parsing enrichment results
-    /// </summary>
     private class EnrichmentResult
     {
         public int Index { get; set; }

@@ -86,9 +86,9 @@ public class MorparaPaymentService : IMorparaPaymentService
    
         private readonly List<FgsTradePackage> _packages = new()
     {
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=336m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=874m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1772m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=7.50m,  PriceTry=1m,   Credits=10,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",              NameTr="Profesyonel",       PriceUsd=19.50m, PriceTry=1m,   Credits=40,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",         NameTr="İş",                PriceUsd=39.50m, PriceTry=1m,  Credits=100, DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
         new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=49.50m, PriceTry=2221m,  Credits=10,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
         new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",       NameTr="Profesyonel Yıllık",PriceUsd=149.50m,PriceTry=6708m,  Credits=40,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
         new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık",  NameTr="İş Yıllık",         PriceUsd=299.50m,PriceTry=13438m, Credits=100, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
@@ -126,8 +126,8 @@ public class MorparaPaymentService : IMorparaPaymentService
     {
         try
         {
-            _logger.LogInformation("💳 MORPARA ÖDEME BAŞLATILIYOR | UserId={Uid} | Product={Prod} | Currency={Cur} | DiscountCode={DC}",
-                request.UserId, request.ProductCode, request.Currency, request.DiscountCode ?? "YOK");
+            _logger.LogInformation("💳 MORPARA ÖDEME BAŞLATILIYOR | UserId={Uid} | Product={Prod} | DiscountCode={DC}",
+                request.UserId, request.ProductCode, request.DiscountCode ?? "YOK");
 
             var package = FindPackage(request.ProductCode);
             if (package == null)
@@ -135,14 +135,12 @@ public class MorparaPaymentService : IMorparaPaymentService
 
             var conversationId = BuildConversationId(request.UserId);
 
-            // Para birimine göre fiyat ve ayarları belirle
-            bool isUsd = request.Currency?.ToUpper() == "USD";
-            decimal basePrice = isUsd ? package.PriceUsd : package.PriceTry;
-            string currencyCode = isUsd ? "840" : "949";
-            string language = isUsd ? "en" : "tr";
-            string pfSubMerchantId = _merchantId; // TL ve USD için aynı
+            // Sadece TL ile ödeme alınacak
+            decimal finalPrice = package.PriceTry;
+            string currencyCode = "949"; // Sadece TRY
+            string language = "tr";
+            string pfSubMerchantId = _merchantId;
 
-            decimal finalPrice = basePrice;
             decimal discountPercent = 0;
             if (!string.IsNullOrEmpty(request.DiscountCode))
             {
@@ -151,7 +149,7 @@ public class MorparaPaymentService : IMorparaPaymentService
                 if (dc != null)
                 {
                     discountPercent = dc.DiscountPercentage;
-                    finalPrice = Math.Round(basePrice * (1 - discountPercent / 100), 2);
+                    finalPrice = Math.Round(package.PriceTry * (1 - discountPercent / 100), 2);
                 }
             }
 
@@ -163,8 +161,6 @@ public class MorparaPaymentService : IMorparaPaymentService
             var installmentStr = installmentInt.ToString();
 
             // Sign: Mor Para'nın belirlediği kesin sıra
-            // ConversationId;MerchantId;ReturnUrl;FailUrl;PaymentMethod;Language;
-            // PaymentInstrumentType;TransactionType;VftFlag;InstallmentCount;Amount;CurrencyCode;PFSubMerchantId;ApiKey
             var signValues = new List<string>
             {
                 conversationId,
@@ -172,14 +168,14 @@ public class MorparaPaymentService : IMorparaPaymentService
                 returnUrl,
                 failUrl,
                 "HOSTEDPAYMENT",
-                language,           // TL: "tr", USD: "en"
+                language,
                 "CARD",
                 "SALE",
                 "False",
                 installmentStr,
                 amountStr,
-                currencyCode,       // TL: "949", USD: "840"
-                pfSubMerchantId,    // TL: merchantId, USD: ""
+                currencyCode,
+                pfSubMerchantId,
                 _apiKey
             };
             var sign = CalculateDynamicSign(signValues);
@@ -242,7 +238,7 @@ public class MorparaPaymentService : IMorparaPaymentService
             }
 
             await SavePendingPaymentAsync(conversationId, request.UserId, package,
-                finalPrice, request.DiscountCode, discountPercent, request.Currency ?? "USD");
+                finalPrice, request.DiscountCode, discountPercent, "TRY");
 
             _logger.LogInformation("✅ MORPARA başarılı | ConvId={Id} | Url={Url}", conversationId, paymentUrl);
 
