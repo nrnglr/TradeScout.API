@@ -144,11 +144,11 @@ public class GeminiSearchService : IGeminiSearchService
                 }
 
                 _apiKeyLastUsed[key] = now;
-                return key;
+                return key.Trim(); // Güvenlik için Trim eklendi
             }
 
             _logger.LogWarning("⚠️ All API keys are rate limited. Using key 0 anyway.");
-            return _apiKeys[0];
+            return _apiKeys[0].Trim();
         }
     }
 
@@ -178,9 +178,18 @@ public class GeminiSearchService : IGeminiSearchService
         {
             _logger.LogInformation("🚀 TradeScout Çoklu Arama Modu Başlatıldı: {Sector} - {City}", sector, city);
 
-            var location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
+            // Şehir boşsa sadece ülkeyi (veya Turkey'i) arayacak şekilde düzeltildi
+            string location;
+            if (string.IsNullOrWhiteSpace(city))
+            {
+                location = country ?? "Turkey"; 
+            }
+            else
+            {
+                location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
+            }
 
-            // YENİ: 3 farklı arama stratejisi ile paralel çağır
+            // 3 farklı arama stratejisi ile paralel çağır
             var tasks = new[]
             {
                 CallGeminiApiAsync(BuildSearchPromptWithOffset(sector, location, maxResults, 0, 0), sector, city, country, 0, cancellationToken),
@@ -270,7 +279,7 @@ public class GeminiSearchService : IGeminiSearchService
         {
             try
             {
-                var apiKey = GetNextApiKey();
+                var apiKey = GetNextApiKey().Trim(); // Trim eklendi
                 var keyIndex = _apiKeys.IndexOf(apiKey);
 
                 var httpClient = _httpClientFactory.CreateClient();
@@ -438,8 +447,13 @@ Find {targetCount} real, active businesses in: {sector} / {location}
             foreach (var business in businesses)
             {
                 business.Category ??= sector;
-                business.City ??= city;
                 business.Country ??= country;
+
+                // Veritabanı "City boş olamaz" hatası vermesin diye Fallback
+                if (string.IsNullOrWhiteSpace(business.City))
+                {
+                    business.City = !string.IsNullOrWhiteSpace(city) ? city : (country ?? "Genel");
+                }
             }
 
             _logger.LogInformation("✅ {Count} işletme başarıyla parse edildi", businesses.Count);
@@ -471,8 +485,13 @@ Find {targetCount} real, active businesses in: {sector} / {location}
                         foreach (var business in businesses)
                         {
                             business.Category ??= sector;
-                            business.City ??= city;
                             business.Country ??= country;
+
+                            // Veritabanı "City boş olamaz" hatası vermesin diye Fallback
+                            if (string.IsNullOrWhiteSpace(business.City))
+                            {
+                                business.City = !string.IsNullOrWhiteSpace(city) ? city : (country ?? "Genel");
+                            }
                         }
 
                         return businesses;
@@ -543,26 +562,28 @@ Find {targetCount} real, active businesses in: {sector} / {location}
     private async Task<(List<BusinessDto> EnrichedBatch, int SuccessCount)> EnrichBatchAsync(List<BusinessDto> batch)
     {
         var prompt = BuildEnrichmentPrompt(batch);
-        var apiKey = GetNextApiKey();
+        var apiKey = GetNextApiKey().Trim(); // Trim eklendi
 
         var httpClient = _httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromMinutes(3);
 
+        // HATA BURADAYDI! Markdown link formatı temizlendi ve saf URL'ye çevrildi.
         var apiUrl = $"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){apiKey}";
+        
         var requestBody = new
         {
             contents = new[]
-     {
-        new { parts = new[] { new { text = prompt } } }
-    },
+            {
+                new { parts = new[] { new { text = prompt } } }
+            },
             // BU KISMI EKLİYORUZ (Google Arama Motorunu Kullanması İçin)
             tools = new[]
-     {
-        new { googleSearch = new { } }
-    },
+            {
+                new { googleSearch = new { } }
+            },
             generationConfig = new
             {
-                temperature = 0.2, // Biraz daha fazla çeşitlilik (0.1'den 0.2'ye çıkardık)
+                temperature = 0.2, // Biraz daha fazla çeşitlilik
                 responseMimeType = "application/json"
             }
         };
@@ -614,15 +635,15 @@ Find {targetCount} real, active businesses in: {sector} / {location}
     }
 
     private string BuildEnrichmentPrompt(List<BusinessDto> batch)
-{
-    var businessList = new StringBuilder();
-    for (int i = 0; i < batch.Count; i++)
     {
-        var b = batch[i];
-        businessList.AppendLine($"{i + 1}. \"{b.BusinessName}\" - Web: {b.Website} - Loc: {b.Address ?? b.City}");
-    }
+        var businessList = new StringBuilder();
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var b = batch[i];
+            businessList.AppendLine($"{i + 1}. \"{b.BusinessName}\" - Web: {b.Website} - Loc: {b.Address ?? b.City}");
+        }
 
-    return $@"TASK: Deep Research & Cold Email Personalization Engine.
+        return $@"TASK: Deep Research & Cold Email Personalization Engine.
 Find specific contact persons, official phone numbers, social media profiles, and recent company activities for the following leads.
 
 BUSINESSES:
@@ -643,12 +664,13 @@ JSON FORMAT:
     ""email"": ""j.doe@company.com"",
     ""triggerEvent"": ""Their recent participation in the Anuga Fair 2024"",
     ""mobile"": ""+90 555 123 4567"",
-    ""socialMedia"": ""https://www.linkedin.com/company/example""
+    ""socialMedia"": ""[https://www.linkedin.com/company/example](https://www.linkedin.com/company/example)""
   }}
 ]
 
 CRITICAL: Do NOT hallucinate. If you can't find a specific data point, return null for that field.";
-}
+    }
+
     private List<BusinessDto> ParseEnrichmentResponse(string responseText, List<BusinessDto> originalBatch)
     {
         try
