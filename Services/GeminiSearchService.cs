@@ -49,6 +49,9 @@ public class GeminiSearchService : IGeminiSearchService
     // Batch size for processing (prevents 504 Gateway Timeout)
     private const int DEFAULT_BATCH_SIZE = 60;
 
+    // RAM VE CPU KORUMASI: Aynı anda en fazla 8 Gemini işlemi çalışabilir, diğerleri sıraya girer
+    private static readonly SemaphoreSlim _geminiSemaphore = new SemaphoreSlim(8, 8);
+
     public GeminiSearchService(
         ILogger<GeminiSearchService> logger,
         IConfiguration configuration,
@@ -282,68 +285,78 @@ public class GeminiSearchService : IGeminiSearchService
                 var apiKey = GetNextApiKey().Trim(); // Trim eklendi
                 var keyIndex = _apiKeys.IndexOf(apiKey);
 
-                var httpClient = _httpClientFactory.CreateClient();
-                httpClient.Timeout = TimeSpan.FromMinutes(3);
-
-                var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
-
-                var requestBody = new
+                // SUNUCU KORUMASI: Semaphore eklendi (Aynı anda sadece 8 işlem)
+                await _geminiSemaphore.WaitAsync(cancellationToken);
+                try
                 {
-                    contents = new[]
+                    // MEMORY KORUMASI: using blokları eklendi
+                    using var httpClient = _httpClientFactory.CreateClient();
+                    httpClient.Timeout = TimeSpan.FromMinutes(3);
+
+                    var apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
+
+                    var requestBody = new
                     {
-                        new
+                        contents = new[]
                         {
-                            parts = new[] { new { text = prompt } }
+                            new
+                            {
+                                parts = new[] { new { text = prompt } }
+                            }
+                        },
+                        generationConfig = new
+                        {
+                            temperature = 0.1,
+                            responseMimeType = "application/json"
                         }
-                    },
-                    generationConfig = new
+                    };
+
+                    using var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+                    _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex}, attempt {Attempt})...",
+                        batchIndex, keyIndex, attempt);
+
+                    using var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent, cancellationToken);
+                    var responseContent = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+                    if (!httpResponse.IsSuccessStatusCode)
                     {
-                        temperature = 0.1,
-                        responseMimeType = "application/json"
-                    }
-                };
+                        if ((int)httpResponse.StatusCode == 429 && attempt < maxRetries)
+                        {
+                            int waitSeconds = attempt * 15;
+                            _logger.LogWarning("⚠️ Batch #{BatchIndex} - Rate limit (429), {Wait}s bekleniyor (deneme {Attempt}/{Max})...",
+                                batchIndex, waitSeconds, attempt, maxRetries);
+                            await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
+                            continue;
+                        }
 
-                var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-
-                _logger.LogInformation("🤖 Batch #{BatchIndex} - Calling Gemini API (key #{KeyIndex}, attempt {Attempt})...",
-                    batchIndex, keyIndex, attempt);
-
-                var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent, cancellationToken);
-                var responseContent = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
-
-                if (!httpResponse.IsSuccessStatusCode)
-                {
-                    if ((int)httpResponse.StatusCode == 429 && attempt < maxRetries)
-                    {
-                        int waitSeconds = attempt * 15;
-                        _logger.LogWarning("⚠️ Batch #{BatchIndex} - Rate limit (429), {Wait}s bekleniyor (deneme {Attempt}/{Max})...",
-                            batchIndex, waitSeconds, attempt, maxRetries);
-                        await Task.Delay(TimeSpan.FromSeconds(waitSeconds), cancellationToken);
-                        continue;
+                        _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}", batchIndex, responseContent);
+                        return new List<BusinessDto>();
                     }
 
-                    _logger.LogError("❌ Batch #{BatchIndex} - Gemini API Error: {Content}", batchIndex, responseContent);
-                    return new List<BusinessDto>();
+                    var jsonResponse = JsonDocument.Parse(responseContent);
+                    var text = jsonResponse.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts")[0]
+                        .GetProperty("text")
+                        .GetString();
+
+                    if (string.IsNullOrEmpty(text))
+                    {
+                        _logger.LogWarning("⚠️ Batch #{BatchIndex} - Boş yanıt", batchIndex);
+                        return new List<BusinessDto>();
+                    }
+
+                    var businesses = ParseGeminiResponse(text, sector, city, country);
+                    _logger.LogInformation("✅ Batch #{BatchIndex} - {Count} işletme bulundu", batchIndex, businesses.Count);
+
+                    return businesses;
                 }
-
-                var jsonResponse = JsonDocument.Parse(responseContent);
-                var text = jsonResponse.RootElement
-                    .GetProperty("candidates")[0]
-                    .GetProperty("content")
-                    .GetProperty("parts")[0]
-                    .GetProperty("text")
-                    .GetString();
-
-                if (string.IsNullOrEmpty(text))
+                finally
                 {
-                    _logger.LogWarning("⚠️ Batch #{BatchIndex} - Boş yanıt", batchIndex);
-                    return new List<BusinessDto>();
+                    _geminiSemaphore.Release(); // İşlem bitince diğer bekleyene izin ver
                 }
-
-                var businesses = ParseGeminiResponse(text, sector, city, country);
-                _logger.LogInformation("✅ Batch #{BatchIndex} - {Count} işletme bulundu", batchIndex, businesses.Count);
-
-                return businesses;
             }
             catch (TaskCanceledException)
             {
@@ -463,24 +476,26 @@ Find {targetCount} real, active businesses in: {sector} / {location}
         {
             _logger.LogError(ex, "❌ JSON parse hatası. Response: {Response}", responseText);
 
-            var jsonMatch = System.Text.RegularExpressions.Regex.Match(responseText, @"\[.*\]",
-                System.Text.RegularExpressions.RegexOptions.Singleline);
+            // CPU KORUMASI: Catastrophic Regex Silindi, IndexOf Eklendi
+            int startIndex = responseText.IndexOf('[');
+            int endIndex = responseText.LastIndexOf(']');
 
-            if (jsonMatch.Success)
+            if (startIndex != -1 && endIndex != -1 && endIndex > startIndex)
             {
                 try
                 {
+                    string cleanJson = responseText.Substring(startIndex, endIndex - startIndex + 1);
                     var options = new JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true,
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                     };
 
-                    var businesses = JsonSerializer.Deserialize<List<BusinessDto>>(jsonMatch.Value, options);
+                    var businesses = JsonSerializer.Deserialize<List<BusinessDto>>(cleanJson, options);
 
                     if (businesses != null && businesses.Any())
                     {
-                        _logger.LogInformation("✅ Regex ile {Count} işletme çıkarıldı", businesses.Count);
+                        _logger.LogInformation("✅ IndexOf ile {Count} işletme çıkarıldı", businesses.Count);
 
                         foreach (var business in businesses)
                         {
@@ -564,58 +579,67 @@ Find {targetCount} real, active businesses in: {sector} / {location}
         var prompt = BuildEnrichmentPrompt(batch);
         var apiKey = GetNextApiKey().Trim(); // Trim eklendi
 
-        var httpClient = _httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromMinutes(3);
-
-        // HATA BURADAYDI! Markdown link formatı temizlendi ve saf URL'ye çevrildi.
-        var apiUrl = $"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){apiKey}";
-        
-        var requestBody = new
+        // SUNUCU KORUMASI: Semaphore eklendi
+        await _geminiSemaphore.WaitAsync();
+        try
         {
-            contents = new[]
+            // MEMORY KORUMASI: using blokları eklendi
+            using var httpClient = _httpClientFactory.CreateClient();
+            httpClient.Timeout = TimeSpan.FromMinutes(3);
+
+            // URL HATASI DÜZELTİLDİ: Markdown string silindi, temiz link eklendi
+            var apiUrl = $"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){apiKey}";
+            
+            var requestBody = new
             {
-                new { parts = new[] { new { text = prompt } } }
-            },
-            // BU KISMI EKLİYORUZ (Google Arama Motorunu Kullanması İçin)
-            tools = new[]
+                contents = new[]
+                {
+                    new { parts = new[] { new { text = prompt } } }
+                },
+                tools = new[]
+                {
+                    new { googleSearch = new { } }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.2, // Biraz daha fazla çeşitlilik
+                    responseMimeType = "application/json"
+                }
+            };
+
+            using var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+            using var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
+            var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+            if (!httpResponse.IsSuccessStatusCode)
             {
-                new { googleSearch = new { } }
-            },
-            generationConfig = new
-            {
-                temperature = 0.2, // Biraz daha fazla çeşitlilik
-                responseMimeType = "application/json"
+                _logger.LogError("❌ Gemini API Enrichment Error: {Content}", responseContent);
+                throw new Exception($"Gemini API failed: {responseContent}");
             }
-        };
 
-        var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-        var httpResponse = await httpClient.PostAsync(apiUrl, jsonContent);
-        var responseContent = await httpResponse.Content.ReadAsStringAsync();
+            var jsonResponse = JsonDocument.Parse(responseContent);
+            var text = jsonResponse.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
 
-        if (!httpResponse.IsSuccessStatusCode)
-        {
-            _logger.LogError("❌ Gemini API Enrichment Error: {Content}", responseContent);
-            throw new Exception($"Gemini API failed: {responseContent}");
+            if (string.IsNullOrEmpty(text))
+            {
+                _logger.LogWarning("⚠️ Gemini AI enrichment boş yanıt döndü");
+                return (batch, 0);
+            }
+
+            var enrichedList = ParseEnrichmentResponse(text, batch);
+            var successCount = enrichedList.Count(b => HasValidContactInfo(b.Email) || HasValidContactInfo(b.Mobile));
+
+            return (enrichedList, successCount);
         }
-
-        var jsonResponse = JsonDocument.Parse(responseContent);
-        var text = jsonResponse.RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString();
-
-        if (string.IsNullOrEmpty(text))
+        finally
         {
-            _logger.LogWarning("⚠️ Gemini AI enrichment boş yanıt döndü");
-            return (batch, 0);
+            _geminiSemaphore.Release(); // İşlem bitince sıradakine izin ver
         }
-
-        var enrichedList = ParseEnrichmentResponse(text, batch);
-        var successCount = enrichedList.Count(b => HasValidContactInfo(b.Email) || HasValidContactInfo(b.Mobile));
-
-        return (enrichedList, successCount);
     }
 
     private bool HasValidContactInfo(string? value)
