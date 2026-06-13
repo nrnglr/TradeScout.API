@@ -53,166 +53,25 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly string _baseUrl;
     private readonly string _callbackUrl;
 
-    // ─── Paket listesi ────────────────────────────────────────────────────────
+    // ─── Paket listesi ────────────────────────────────────────────────────────// ─── Paket listesi ────────────────────────────────────────────────────────
     private readonly List<FgsTradePackage> _packages = new()
     {
-        // ── Aylık paketler (taksit yok, MaxInstallment=1) ────────────────────
-        new()
-        {
-            ProductCode    = "1274715",
-            Alias          = "starter_monthly",
-            Name           = "Starter",
-            NameTr         = "Başlangıç",
-            PriceUsd       = 7.50m,
-            PriceTry       = 336m,
-            Credits        = 10,
-            DurationDays   = 30,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = false,
-            Description    = "Starter Aylık Üyelik"
-        },
-        new()
-        {
-            ProductCode    = "1274739",
-            Alias          = "pro_monthly",
-            Name           = "Pro",
-            NameTr         = "Profesyonel",
-            PriceUsd       = 19.50m,
-            PriceTry       = 874m,
-            Credits        = 40,
-            DurationDays   = 30,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = false,
-            Description    = "Pro Aylık Üyelik"
-        },
-        new()
-        {
-            ProductCode    = "1274779",
-            Alias          = "business_monthly",
-            Name           = "Business",
-            NameTr         = "İş",
-            PriceUsd       = 39.50m,
-            PriceTry       = 1772m,
-            Credits        = 100,
-            DurationDays   = 30,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = false,
-            Description    = "Business Aylık Üyelik"
-        },
+        // ── Aylık paketler ────────────────────
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=10m,   PriceTry=450m,   Credits=10,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",       PriceUsd=26m,   PriceTry=1170m,  Credits=40,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                PriceUsd=53m,   PriceTry=2385m,  Credits=100,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
 
-        // ── Yıllık paketler (9 veya 12 taksit seçeneği var) ─────────────────
-        new()
-        {
-            ProductCode    = "1274716",
-            Alias          = "starter_yearly",
-            Name           = "Starter Yıllık",
-            NameTr         = "Başlangıç Yıllık",
-            PriceUsd       = 99m,
-            PriceTry       = 4257m,
-            Credits        = 10,
-            DurationDays   = 365,
-            MaxInstallment = 2,         // TEST: 2 taksit (her biri 1 TL)
-            IsYearly       = true,
-            IsCredit       = false,
-            Description    = "Starter Yıllık Üyelik - TEST 2TL (2×1TL taksit)"
-        },
-        new()
-        {
-            ProductCode    = "1274740",
-            Alias          = "pro_yearly",
-            Name           = "Pro Yıllık",
-            NameTr         = "Profesyonel Yıllık",
-            PriceUsd       = 299m,
-            PriceTry       = 12857m,
-            Credits        = 40,
-            DurationDays   = 365,
-            MaxInstallment = 12,
-            IsYearly       = true,
-            IsCredit       = false,
-            Description    = "Pro Yıllık Üyelik - $299/yıl (%36 indirim)"
-        },
-        new()
-        {
-            ProductCode    = "1274780",
-            Alias          = "business_yearly",
-            Name           = "Business Yıllık",
-            NameTr         = "İş Yıllık",
-            PriceUsd       = 599m,
-            PriceTry       = 25757m,
-            Credits        = 100,
-            DurationDays   = 365,
-            MaxInstallment = 12,
-            IsYearly       = true,
-            IsCredit       = false,
-            Description    = "Business Yıllık Üyelik - $599/yıl (%37 indirim)"
-        },
+        // ── Yıllık paketler ─────────────────
+        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=120,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
+        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık",PriceUsd=199m,  PriceTry=8955m,  Credits=480,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
+        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",         PriceUsd=399m,  PriceTry=17955m, Credits=1200, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
 
-        // ── Extra Kredi paketleri (tek seferlik, taksit yok) ─────────────────
-        new()
-        {
-            ProductCode    = "1274710",
-            Alias          = "credit_10",
-            Name           = "10 Kredi",
-            NameTr         = "10 Ekstra Kredi",
-            PriceUsd       = 10m,
-            PriceTry       = 430m,
-            Credits        = 10,
-            DurationDays   = 0,         // Süresiz
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = true,
-            Description    = "10 Ekstra Arama Kredisi"
-        },
-        new()
-        {
-            ProductCode    = "1274725",
-            Alias          = "credit_25",
-            Name           = "25 Kredi",
-            NameTr         = "25 Ekstra Kredi",
-            PriceUsd       = 20m,
-            PriceTry       = 860m,
-            Credits        = 25,
-            DurationDays   = 0,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = true,
-            Description    = "25 Ekstra Arama Kredisi"
-        },
-        new()
-        {
-            ProductCode    = "1274750",
-            Alias          = "credit_50",
-            Name           = "50 Kredi",
-            NameTr         = "50 Ekstra Kredi",
-            PriceUsd       = 35m,
-            PriceTry       = 1505m,
-            Credits        = 50,
-            DurationDays   = 0,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = true,
-            Description    = "50 Ekstra Arama Kredisi"
-        },
-        new()
-        {
-            ProductCode    = "1247100",
-            Alias          = "credit_100",
-            Name           = "100 Kredi",
-            NameTr         = "100 Ekstra Kredi",
-            PriceUsd       = 60m,
-            PriceTry       = 2580m,
-            Credits        = 100,
-            DurationDays   = 0,
-            MaxInstallment = 1,
-            IsYearly       = false,
-            IsCredit       = true,
-            Description    = "100 Ekstra Arama Kredisi"
-        },
+        // ── Extra Kredi paketleri ─────────────────
+        new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=450m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="10 Ekstra Kredi" },
+        new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=900m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="25 Ekstra Kredi" },
+        new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1575m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="50 Ekstra Kredi" },
+        new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2700m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="100 Ekstra Kredi" },
     };
-
     public ToslaPaymentService(
         HttpClient httpClient,
         ILogger<ToslaPaymentService> logger,
