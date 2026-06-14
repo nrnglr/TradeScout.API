@@ -84,62 +84,73 @@ public class PaymentController : ControllerBase
     }
 
     /// <summary>
-    /// Tosla callback endpoint - Ödeme sonucu buraya gelir
-    /// </summary>
-    [HttpPost("callback")]
-    [AllowAnonymous] // Tosla'dan gelecek, auth yok
-    [Consumes("application/x-www-form-urlencoded", "application/json", "multipart/form-data")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> PaymentCallback([FromForm] ToslaCallbackDto callback)
+    /// <summary>
+/// Tosla callback endpoint - Ödeme sonucu buraya gelir
+/// </summary>
+[HttpPost("callback")]
+[AllowAnonymous] // Tosla'dan gelecek, auth yok
+[Consumes("application/x-www-form-urlencoded")] // Tosla form verisi gönderir
+[ProducesResponseType(StatusCodes.Status200OK)]
+public async Task<IActionResult> PaymentCallback([FromForm] ToslaCallbackDto callback)
+{
+    // FIX: Tosla bazen verileri tamamen küçük harfle (form verisi olarak) gönderir.
+    // Eğer DTO'nuz otomatik eşleşmediyse, HttpContext.Request.Form üzerinden manuel fallback yapıyoruz.
+    callback.OrderId ??= HttpContext.Request.Form["orderId"].ToString();
+    callback.TransactionId ??= HttpContext.Request.Form["transactionId"].ToString();
+    callback.BankResponseCode ??= HttpContext.Request.Form["bankResponseCode"].ToString();
+    callback.BankResponseMessage ??= HttpContext.Request.Form["bankResponseMessage"].ToString();
+    callback.Echo ??= HttpContext.Request.Form["echo"].ToString();
+    callback.ExtraParameters ??= HttpContext.Request.Form["extraParameters"].ToString();
+    callback.AuthCode ??= HttpContext.Request.Form["authCode"].ToString();
+    callback.Message ??= HttpContext.Request.Form["message"].ToString();
+
+    if (callback.Amount == 0 && long.TryParse(HttpContext.Request.Form["amount"], out var parsedAmount))
     {
-        try
-        {
-            // Gelen tüm verileri logla
-            _logger.LogInformation("🔔 === TOSLA CALLBACK START ===");
-            _logger.LogInformation("📋 OrderId: {OrderId}", callback.OrderId ?? "(null)");
-            _logger.LogInformation("📋 TransactionId: {TxId}", callback.TransactionId ?? "(null)");
-            _logger.LogInformation("📋 Code: {Code}", callback.Code);
-            _logger.LogInformation("📋 Message: {Msg}", callback.Message ?? "(null)");
-            _logger.LogInformation("📋 BankResponseCode: {BankCode}", callback.BankResponseCode ?? "(null)");
-            _logger.LogInformation("📋 BankResponseMessage: {BankMsg}", callback.BankResponseMessage ?? "(null)");
-            _logger.LogInformation("📋 Amount: {Amount}", callback.Amount);
-            _logger.LogInformation("📋 Echo: {Echo}", callback.Echo ?? "(null)");
-            _logger.LogInformation("📋 ExtraParameters: {Extra}", callback.ExtraParameters ?? "(null)");
-            _logger.LogInformation("📋 AuthCode: {Auth}", callback.AuthCode ?? "(null)");
-            _logger.LogInformation("📋 MdStatus: {MdStatus}", callback.MdStatus ?? "(null)");
-            _logger.LogInformation("📋 RequestStatus: {ReqStatus}", callback.RequestStatus);
-            _logger.LogInformation("🔔 === TOSLA CALLBACK END ===");
-
-            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
-
-            var success = await _toslaPaymentService.ProcessCallbackAsync(callback);
-
-            if (success)
-            {
-                _logger.LogInformation("✅ Callback işlendi - SUCCESS | OrderId: {OrderId}", callback.OrderId);
-                
-                // Tosla'ya OK yanıtı döndür (önemli!)
-                // Eğer redirect gerekiyorsa, önce OK döndürüp sonra JavaScript ile yönlendir
-                // Ama genelde Tosla kendi 3D Secure sayfasından kullanıcıyı yönlendirir
-                
-                // Ödeme başarılı → kullanıcıyı success sayfasına yönlendir
-                return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}&gateway=tosla");
-            }
-
-            _logger.LogWarning("❌ Callback işlendi - FAILED | OrderId: {OrderId} | Code: {Code}", 
-                callback.OrderId, callback.BankResponseCode);
-            
-            // Ödeme başarısız → failed sayfasına yönlendir
-            return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}&gateway=tosla");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Callback işleme hatası | OrderId: {OrderId}", callback?.OrderId);
-            var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
-            return Redirect($"{frontendUrl}/payment/failed?error=system");
-        }
+        callback.Amount = parsedAmount;
     }
+
+    if (callback.Code == 0 && int.TryParse(HttpContext.Request.Form["code"], out var parsedCode))
+    {
+        callback.Code = parsedCode;
+    }
+
+    // Gelen tüm verileri logla
+    _logger.LogInformation("🔔 === TOSLA CALLBACK START ===");
+    _logger.LogInformation("📋 OrderId: {OrderId}", callback.OrderId ?? "(null)");
+    _logger.LogInformation("📋 TransactionId: {TxId}", callback.TransactionId ?? "(null)");
+    _logger.LogInformation("📋 Code: {Code}", callback.Code);
+    _logger.LogInformation("📋 Message: {Msg}", callback.Message ?? "(null)");
+    _logger.LogInformation("📋 BankResponseCode: {BankCode}", callback.BankResponseCode ?? "(null)");
+    _logger.LogInformation("📋 BankResponseMessage: {BankMsg}", callback.BankResponseMessage ?? "(null)");
+    _logger.LogInformation("📋 Amount: {Amount}", callback.Amount);
+    _logger.LogInformation("📋 Echo: {Echo}", callback.Echo ?? "(null)");
+    _logger.LogInformation("📋 ExtraParameters: {Extra}", callback.ExtraParameters ?? "(null)");
+    _logger.LogInformation("📋 AuthCode: {Auth}", callback.AuthCode ?? "(null)");
+    _logger.LogInformation("📋 MdStatus: {MdStatus}", callback.MdStatus ?? "(null)");
+    _logger.LogInformation("📋 RequestStatus: {ReqStatus}", callback.RequestStatus);
+    _logger.LogInformation("🔔 === TOSLA CALLBACK END ===");
+
+    var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
+
+    // İşlemi servis tarafında doğrula ve DB'ye işle
+    var success = await _toslaPaymentService.ProcessCallbackAsync(callback);
+
+    // Kredi kartı kullanan kullanıcı 3D Secure ekranındayken bu endpoint tetiklendiği için 
+    // kullanıcıyı tarayıcı üzerinden frontende yönlendirmemiz şarttır.
+    if (success)
+    {
+        _logger.LogInformation("✅ Callback başarıyla işlendi ve üyelik aktifleştirildi - SUCCESS | OrderId: {OrderId}", callback.OrderId);
+        
+        // Ödeme başarılı → Kullanıcıyı frontenddeki başarı sayfasına yönlendir
+        return Redirect($"{frontendUrl}/payment/success?orderId={callback.OrderId}&gateway=tosla");
+    }
+
+    _logger.LogWarning("❌ Callback işlendi fakat ödeme başarısız - FAILED | OrderId: {OrderId} | BankCode: {Code}", 
+        callback.OrderId, callback.BankResponseCode);
+    
+    // Ödeme başarısız → Kullanıcıyı frontenddeki başarısız sayfasına yönlendir
+    return Redirect($"{frontendUrl}/payment/failed?orderId={callback.OrderId}&errorCode={callback.BankResponseCode}&gateway=tosla");
+}
 
     /// <summary>
     /// Ödeme başarılı sayfası - Kullanıcı ödeme sonrası buraya yönlendirilir
