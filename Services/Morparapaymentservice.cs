@@ -92,9 +92,9 @@ public class MorparaPaymentService : IMorparaPaymentService
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                PriceUsd=53m,   PriceTry=2385m,  Credits=50,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
 
         // Yıllık Paketler (69, 199, 399 USD)
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=120,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık",PriceUsd=199m,  PriceTry=8955m,  Credits=480,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",         PriceUsd=399m,  PriceTry=17955m, Credits=1200, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık",PriceUsd=199m,  PriceTry=8955m,  Credits=240,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",         PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
         
         // Ekstra Kredi Paketleri (Değişiklik yapılmadı)
         new() { ProductCode="1274710", Alias="credit_10",        Name="10 Kredi",        NameTr="10 Ekstra Kredi",   PriceUsd=10m,   PriceTry=450m,   Credits=10,   DurationDays=0,   MaxInstallment=1,  IsYearly=false, IsCredit=true  },
