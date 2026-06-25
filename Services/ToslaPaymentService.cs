@@ -53,7 +53,7 @@ public class ToslaPaymentService : IToslaPaymentService
     {
         // Aylık paketler
         new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=450m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1170m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
         new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2385m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
 
         // Yıllık paketler
