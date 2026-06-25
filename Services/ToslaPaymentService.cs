@@ -15,30 +15,26 @@ public interface IToslaPaymentService
     Task<bool> ProcessCallbackAsync(ToslaCallbackDto callback);
     List<FgsTradePackage> GetAvailablePackages();
     Task<ToslaInquiryResponseDto?> InquiryPaymentAsync(string orderId);
-    
-    /// <summary>
-    /// Ödemeyi Tosla'dan sorgulayıp doğrula ve kredileri yükle
-    /// </summary>
     Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string orderId);
 }
 
 /// <summary>
 /// FGSTrade Paket Yapısı:
 ///
-/// AYLIK (taksit yok):
-///   1274715  Starter Monthly   → $15/ay
-///   1274739  Pro Monthly       → $39/ay
-///   1274779  Business Monthly  → $79/ay
+/// AYLIK:
+///   1274715  Starter Monthly   → $10/ay   → 5  kredi
+///   1274739  Pro Monthly       → $26/ay   → 20 kredi
+///   1274779  Business Monthly  → $53/ay   → 50 kredi
 ///
-/// YILLIK (9 veya 12 taksit seçeneği var):
-///   1274716  Starter Annual    → $99/yıl   (aylık $15 yerine %45 indirim)
-///   1274740  Pro Annual        → $299/yıl  (aylık $39 yerine %36 indirim)
-///   1274780  Business Annual   → $599/yıl  (aylık $79 yerine %37 indirim)
+/// YILLIK:
+///   1274716  Starter Annual    → $69/yıl  → 60  kredi
+///   1274740  Pro Annual        → $199/yıl → 240 kredi
+///   1274780  Business Annual   → $399/yıl → 600 kredi
 ///
-/// EXTRA KREDİ (tek seferlik, taksit yok):
-///   1274710  10 Kredi  Extra
-///   1274725  25 Kredi  Extra
-///   1274750  50 Kredi  Extra
+/// EXTRA KREDİ:
+///   1274710  10  Kredi Extra
+///   1274725  25  Kredi Extra
+///   1274750  50  Kredi Extra
 ///   1247100  100 Kredi Extra
 /// </summary>
 public class ToslaPaymentService : IToslaPaymentService
@@ -53,25 +49,25 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly string _baseUrl;
     private readonly string _callbackUrl;
 
-    // ─── Paket listesi ────────────────────────────────────────────────────────// ─── Paket listesi ────────────────────────────────────────────────────────
     private readonly List<FgsTradePackage> _packages = new()
     {
-        // ── Aylık paketler ────────────────────
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=10m,   PriceTry=450m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",       PriceUsd=26m,   PriceTry=1170m,  Credits=20,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                PriceUsd=53m,   PriceTry=2385m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
+        // Aylık paketler
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=450m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2385m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
 
-        // ── Yıllık paketler ─────────────────
+        // Yıllık paketler
         new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık",PriceUsd=199m,  PriceTry=8955m,  Credits=240,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",         PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
+        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık", PriceUsd=199m,  PriceTry=8955m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
+        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",          PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
 
-        // ── Extra Kredi paketleri ─────────────────
+        // Extra Kredi paketleri
         new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=450m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="10 Ekstra Kredi" },
         new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=900m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="25 Ekstra Kredi" },
         new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1575m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="50 Ekstra Kredi" },
         new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2700m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="100 Ekstra Kredi" },
     };
+
     public ToslaPaymentService(
         HttpClient httpClient,
         ILogger<ToslaPaymentService> logger,
@@ -111,6 +107,8 @@ public class ToslaPaymentService : IToslaPaymentService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // ÖDEME BAŞLATMA
+    // ─────────────────────────────────────────────────────────────────────────
     public async Task<ToslaPaymentResponseDto> InitializePaymentAsync(ToslaPaymentRequestDto request)
     {
         try
@@ -122,33 +120,27 @@ public class ToslaPaymentService : IToslaPaymentService
                 return Fail("Geçersiz paket kodu.", "INVALID_PRODUCT");
             }
 
-            // Taksit sayısı belirle
-            // - Aylık paket ve kredi → taksit YOK (1)
-            // - Yıllık paket → frontend'den gelen installment (max 12)
+            // Taksit sayısı
             int installment = 1;
             if (package.IsYearly && !package.IsCredit)
-            {
                 installment = Math.Clamp(request.Installment, 1, package.MaxInstallment);
-            }
 
-            // İndirim kodu kontrolü ve fiyat hesaplama
+            // İndirim kodu kontrolü
             decimal finalPrice = package.PriceTry;
             decimal discountPercentage = 0;
-            
+
             if (!string.IsNullOrWhiteSpace(request.DiscountCode))
             {
                 var discountCode = await _dbContext.DiscountCodes
                     .FirstOrDefaultAsync(dc => dc.Code.ToUpper() == request.DiscountCode.ToUpper());
 
-                if (discountCode != null 
-                    && discountCode.IsActive 
+                if (discountCode != null
+                    && discountCode.IsActive
                     && discountCode.CurrentUses < discountCode.MaxUses
                     && (!discountCode.ExpiresAt.HasValue || discountCode.ExpiresAt.Value >= DateTime.UtcNow))
                 {
                     discountPercentage = discountCode.DiscountPercentage;
-                    var discountAmount = finalPrice * discountPercentage / 100m;
-                    finalPrice = finalPrice - discountAmount;
-                    
+                    finalPrice = finalPrice - (finalPrice * discountPercentage / 100m);
                     _logger.LogInformation("💰 İndirim uygulandı: {Code} | %{Percent} | Orijinal: {Original} TL | İndirimli: {Final} TL",
                         request.DiscountCode, discountPercentage, package.PriceTry, finalPrice);
                 }
@@ -158,29 +150,58 @@ public class ToslaPaymentService : IToslaPaymentService
                 }
             }
 
-            // Hash parametreleri (GMT+3, tek seferde üret)
+            // Hash parametreleri
             var rnd      = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-            
-            // Tosla Hash Formülü: apiPass + clientId + apiUser + rnd + timeSpan
-            // NOT: callbackUrl hash'e DAHİL DEĞİL - sadece body'de gönderilir
             var hashInput = _apiPass + _clientId + _apiUser + rnd + timeSpan;
             var hash = ComputeHash(hashInput);
 
-            _logger.LogInformation(
-                "HASH DEBUG | Rnd={Rnd} | TimeSpan={Ts} | ApiPass={Pass} | ClientId={Cid} | ApiUser={User}",
+            _logger.LogInformation("HASH DEBUG | Rnd={Rnd} | TimeSpan={Ts} | ApiPass={Pass} | ClientId={Cid} | ApiUser={User}",
                 rnd, timeSpan, _apiPass, _clientId, _apiUser);
             _logger.LogInformation("HASH INPUT: '{Input}'", hashInput);
             _logger.LogInformation("HASH OUTPUT: '{Hash}'", hash);
 
-            // OrderId max 20 karakter
+            // OrderId (max 20 karakter)
             var ts      = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
             var uid     = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
             var orderId = $"FGS{ts}{uid}";
             if (orderId.Length > 20) orderId = orderId[..20];
 
-            // Tutar: İndirimli fiyatı TL kuruşa çevir
             var amountKurus = (long)(finalPrice * 100);
+
+            // ─── KRİTİK: PENDING kayıt yaz ───────────────────────────────────
+            // Tosla callback'inde Amount=0, Echo=boş geldiği için ProductCode
+            // tespit edilemiyor. Bu kaydı önceden yazarak garantiye alıyoruz.
+            if (int.TryParse(request.UserId, out int userIdInt))
+            {
+                // Aynı orderId ile zaten PENDING kayıt varsa tekrar yazma
+                var existingPending = await _dbContext.PaymentHistories
+                    .FirstOrDefaultAsync(p => p.OrderId == orderId);
+
+                if (existingPending == null)
+                {
+                    _dbContext.PaymentHistories.Add(new PaymentHistory
+                    {
+                        UserId            = userIdInt,
+                        OrderId           = orderId,
+                        TransactionId     = "",
+                        ProductCode       = package.ProductCode,
+                        PackageName       = package.Name,
+                        Amount            = finalPrice,
+                        Currency          = "TRY",
+                        CreditsAdded      = package.Credits,
+                        Status            = "PENDING",
+                        PaymentDate       = DateTime.UtcNow,
+                        DiscountCode      = string.IsNullOrWhiteSpace(request.DiscountCode) ? null : request.DiscountCode,
+                        DiscountPercentage = discountPercentage > 0 ? (int?)discountPercentage : null,
+                        FinalAmount       = finalPrice,
+                    });
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation("💾 PENDING kayıt oluşturuldu | OrderId={Oid} | ProductCode={Pc} | Credits={Cred}",
+                        orderId, package.ProductCode, package.Credits);
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────
 
             var body = new
             {
@@ -198,16 +219,16 @@ public class ToslaPaymentService : IToslaPaymentService
                 echo             = $"{request.UserId}|{package.ProductCode}",
                 extraParameters  = JsonSerializer.Serialize(new
                 {
-                    userId           = request.UserId,
-                    productCode      = package.ProductCode,
-                    credits          = package.Credits,
-                    isYearly         = package.IsYearly,
-                    isCredit         = package.IsCredit,
-                    durationDays     = package.DurationDays,
-                    discountCode     = request.DiscountCode,
-                    discountPercent  = discountPercentage,
-                    originalPrice    = package.PriceTry,
-                    discountedPrice  = finalPrice
+                    userId          = request.UserId,
+                    productCode     = package.ProductCode,
+                    credits         = package.Credits,
+                    isYearly        = package.IsYearly,
+                    isCredit        = package.IsCredit,
+                    durationDays    = package.DurationDays,
+                    discountCode    = request.DiscountCode,
+                    discountPercent = discountPercentage,
+                    originalPrice   = package.PriceTry,
+                    discountedPrice = finalPrice
                 })
             };
 
@@ -253,6 +274,10 @@ public class ToslaPaymentService : IToslaPaymentService
 
             var msg = GetStr(root, "Message", "message") ?? "Bilinmeyen hata";
             _logger.LogError("Tosla hata | Code={Code} | Msg={Msg}", code, msg);
+
+            // Tosla'ya gönderim başarısız olduysa PENDING kaydı FAILED yap
+            await UpdatePendingToFailed(orderId, $"Tosla Code={code}: {msg}");
+
             return Fail(msg, code.ToString());
         }
         catch (Exception ex)
@@ -263,12 +288,14 @@ public class ToslaPaymentService : IToslaPaymentService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // CALLBACK İŞLEME
+    // ─────────────────────────────────────────────────────────────────────────
     public async Task<bool> ProcessCallbackAsync(ToslaCallbackDto callback)
     {
         try
         {
             _logger.LogInformation("🔔 CALLBACK ALINDI | OrderId={Oid} | Code={Code} | BankCode={Bank} | BankMsg={Msg} | Amount={Amt} | Echo={Echo}",
-                callback.OrderId, callback.Code, callback.BankResponseCode, callback.BankResponseMessage, 
+                callback.OrderId, callback.Code, callback.BankResponseCode, callback.BankResponseMessage,
                 callback.Amount, callback.Echo);
 
             if (callback.Code == 0 && callback.BankResponseCode == "00")
@@ -286,418 +313,546 @@ public class ToslaPaymentService : IToslaPaymentService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "❌ CALLBACK HATASI | OrderId={Oid} | Message={Msg}", 
-                callback.OrderId, ex.Message);
+            _logger.LogError(ex, "❌ CALLBACK HATASI | OrderId={Oid}", callback.OrderId);
             return false;
         }
     }
 
-    public async Task<ToslaInquiryResponseDto?> InquiryPaymentAsync(string orderId)
-    {
-        try
-        {
-            _logger.LogInformation("🔍 Tosla Inquiry başlatılıyor | OrderId={Oid}", orderId);
-            
-            var rnd      = Random.Shared.Next(100000, 999999).ToString();
-            var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-            var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
-            
-            var requestBody = new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId };
-            var body     = JsonSerializer.Serialize(requestBody);
-            
-            _logger.LogInformation("📤 Tosla Inquiry Request | URL={Url} | Body={Body}", 
-                $"{_baseUrl}/inquiry", body);
-            
-            var resp     = await _httpClient.PostAsync($"{_baseUrl}/inquiry", new StringContent(body, Encoding.UTF8, "application/json"));
-            var raw      = await resp.Content.ReadAsStringAsync();
-            
-            _logger.LogInformation("📥 Tosla Inquiry Response | StatusCode={Status} | Body={Body}", 
-                (int)resp.StatusCode, raw);
-            
-            if (!resp.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("❌ Tosla Inquiry başarısız | StatusCode={Status} | Response={Resp}", 
-                    (int)resp.StatusCode, raw);
-                return null;
-            }
-            
-            var result = JsonSerializer.Deserialize<ToslaInquiryResponseDto>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            
-            if (result != null)
-            {
-                _logger.LogInformation("✅ Tosla Inquiry başarılı | Code={Code} | Message={Msg} | TransactionCount={Count}", 
-                    result.Code, result.Message, result.Transactions?.Count ?? 0);
-            }
-            
-            return result;
-        }
-        catch (Exception ex) 
-        { 
-            _logger.LogError(ex, "❌ Tosla Inquiry hatası | OrderId={Oid} | Message={Msg}", orderId, ex.Message); 
-            return null; 
-        }
-    }
-
-    public List<FgsTradePackage> GetAvailablePackages() => _packages;
-
     // ─────────────────────────────────────────────────────────────────────────
-    // Başarılı ödeme → üyelik veya kredi aktifleştir
+    // AKTİVASYON
     // ─────────────────────────────────────────────────────────────────────────
     private async Task ActivateMembershipAsync(ToslaCallbackDto callback)
     {
         _logger.LogInformation("🎯 ActivateMembershipAsync başladı | OrderId={Oid}", callback.OrderId);
-        
+
         try
         {
-            string userIdStr = "";
-            string productCode = "";
+            // Duplicate kontrol — aynı OrderId ile zaten SUCCESS var mı?
+            var existingSuccess = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == (callback.OrderId ?? "") && p.Status == "SUCCESS");
 
-            // STRATEJI: OrderId formatı: FGS{timestamp:10}{userId:7+} - Örn: FGS26031214450000002
-            // OrderId'den UserId'yi ÇOK GÜÇLÜ şekilde çıkar
-            if (!string.IsNullOrEmpty(callback.OrderId))
+            if (existingSuccess != null)
             {
-                var orderId = callback.OrderId;
-                if (orderId.StartsWith("FGS") && orderId.Length > 13)
-                {
-                    userIdStr = orderId.Substring(13).TrimStart('0');
-                    _logger.LogInformation("✅ OrderId'den UserId çıkarıldı | OrderId={Oid} → UserId={Uid}", 
-                        orderId, userIdStr);
-                }
+                _logger.LogWarning("⚠️ Duplicate engellendi — zaten başarılı kayıt var | OrderId={Oid} | Id={Id}",
+                    callback.OrderId, existingSuccess.Id);
+                return;
             }
 
-            // FIX #3: ProductCode belirleme öncelik sırası:
-            //   1. echo alanı → "userId|productCode" formatı
-            //   2. extraParameters JSON içindeki "productCode" alanı
-            //   3. Son çare: fiyata göre tahmin (indirim varsa yanlış sonuç verebilir, sadece fallback)
-            var amountTL = callback.Amount / 100m;
+            // ── UserId tespiti ────────────────────────────────────────────────
+            string userIdStr = "";
 
-            // 1. Echo'dan ProductCode çıkar
+            // 1. Echo'dan
+            if (!string.IsNullOrWhiteSpace(callback.Echo))
+            {
+                var echoParts = callback.Echo.Split('|');
+                if (echoParts.Length >= 1 && !string.IsNullOrWhiteSpace(echoParts[0]))
+                    userIdStr = echoParts[0].Trim();
+            }
+
+            // 2. OrderId'den (FGS{10 karakter timestamp}{userId padded})
+            if (string.IsNullOrWhiteSpace(userIdStr) &&
+                !string.IsNullOrEmpty(callback.OrderId) &&
+                callback.OrderId.StartsWith("FGS") &&
+                callback.OrderId.Length > 13)
+            {
+                userIdStr = callback.OrderId.Substring(13).TrimStart('0');
+                _logger.LogInformation("✅ OrderId'den UserId çıkarıldı | OrderId={Oid} → UserId={Uid}",
+                    callback.OrderId, userIdStr);
+            }
+
+            // 3. PENDING kayıttan
+            if (string.IsNullOrWhiteSpace(userIdStr))
+            {
+                var pending = await _dbContext.PaymentHistories
+                    .FirstOrDefaultAsync(p => p.OrderId == callback.OrderId && p.Status == "PENDING");
+                if (pending != null)
+                    userIdStr = pending.UserId.ToString();
+            }
+
+            if (!int.TryParse(userIdStr, out int userId))
+            {
+                _logger.LogError("❌ FATAL: UserId tespit edilemedi | OrderId={Oid}", callback.OrderId);
+                return;
+            }
+
+            // ── ProductCode tespiti ──────────────────────────────────────────
+            string productCode = "";
+
+            // Strateji 1: Echo'dan
             if (!string.IsNullOrWhiteSpace(callback.Echo))
             {
                 var echoParts = callback.Echo.Split('|');
                 if (echoParts.Length >= 2 && !string.IsNullOrWhiteSpace(echoParts[1]))
                 {
                     productCode = echoParts[1].Trim();
-                    _logger.LogInformation("✅ Echo'dan ProductCode alındı | Echo={Echo} → ProductCode={Pc}", callback.Echo, productCode);
+                    _logger.LogInformation("✅ Echo'dan ProductCode alındı | ProductCode={Pc}", productCode);
                 }
             }
 
-            // 2. ExtraParameters'dan ProductCode çıkar (echo yoksa veya boşsa)
+            // Strateji 2: ExtraParameters'dan
             if (string.IsNullOrWhiteSpace(productCode) && !string.IsNullOrWhiteSpace(callback.ExtraParameters))
             {
                 try
                 {
                     var extra = JsonSerializer.Deserialize<JsonElement>(callback.ExtraParameters);
-                    if (extra.TryGetProperty("productCode", out var pcElement))
+                    if (extra.TryGetProperty("productCode", out var pcEl))
                     {
-                        var pcFromExtra = pcElement.GetString();
-                        if (!string.IsNullOrWhiteSpace(pcFromExtra))
+                        var pc = pcEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(pc))
                         {
-                            productCode = pcFromExtra.Trim();
+                            productCode = pc.Trim();
                             _logger.LogInformation("✅ ExtraParameters'dan ProductCode alındı | ProductCode={Pc}", productCode);
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "ExtraParameters'dan ProductCode çıkarılamadı");
+                    _logger.LogWarning(ex, "ExtraParameters parse hatası");
                 }
             }
 
-            // 3. Son çare: fiyata göre tahmin (indirim kodlu ödemelerde yanlış sonuç verebilir!)
+            // Strateji 3: PENDING PaymentHistory kaydından ← ANA ÇÖZÜM
             if (string.IsNullOrWhiteSpace(productCode))
             {
-                _logger.LogWarning("⚠️ Echo ve ExtraParameters'dan ProductCode alınamadı, fiyata göre tahmin yapılıyor | Amount={Amt} TL — indirim varsa yanlış paket seçilebilir!", amountTL);
-                productCode = GuessProductCodeFromAmount(amountTL);
-                _logger.LogInformation("⚠️ Tahmin edilen ProductCode={Pc}", productCode);
-            }
-
-            // UserId validation
-            if (!int.TryParse(userIdStr, out int userId)) 
-            { 
-                _logger.LogError("❌ FATAL: UserId parse edilemedi | OrderId={Oid} | UserIdStr={Uid}", 
-                    callback.OrderId, userIdStr); 
-                
-                // Son çare: PaymentHistory'den en son ödemeyi bulmaya çalış
-                var recentPayment = await _dbContext.PaymentHistories
-                    .Where(p => p.OrderId == callback.OrderId || p.TransactionId == callback.TransactionId)
-                    .OrderByDescending(p => p.PaymentDate)
+                var pendingPayment = await _dbContext.PaymentHistories
+                    .Where(p => p.OrderId == callback.OrderId && p.Status == "PENDING")
                     .FirstOrDefaultAsync();
-                
-                if (recentPayment != null)
+
+                if (pendingPayment != null && !string.IsNullOrWhiteSpace(pendingPayment.ProductCode))
                 {
-                    userId = recentPayment.UserId;
-                    _logger.LogInformation("� PaymentHistory'den UserId bulundu | UserId={Uid}", userId);
-                }
-                else
-                {
-                    _logger.LogError("❌ CRITICAL: UserId hiçbir şekilde bulunamadı!");
-                    return;
+                    productCode = pendingPayment.ProductCode;
+                    _logger.LogInformation("✅ PENDING kayıttan ProductCode alındı | ProductCode={Pc} | Credits={Cred}",
+                        productCode, pendingPayment.CreditsAdded);
                 }
             }
 
-            User? user = null;
-            try
+            // Strateji 4: Son çare — fiyata göre tahmin (indirimde yanlış sonuç verebilir)
+            if (string.IsNullOrWhiteSpace(productCode))
             {
-                _logger.LogInformation("👤 Kullanıcı aranıyor (FindAsync) | UserId={Id}", userId);
-                var userEntry = await _dbContext.Users.FindAsync(userId);
-                user = userEntry is null ? null : userEntry;
-
-                if (user is null)
-                {
-                    _logger.LogError("❌ CRITICAL: Kullanıcı bulunamadı | UserId={Id}", userId);
-                    return;
-                }
+                var amountTL = callback.Amount / 100m;
+                _logger.LogWarning("⚠️ Tüm stratejiler başarısız, fiyata göre tahmin | Amount={Amt} TL", amountTL);
+                productCode = GuessProductCodeFromAmount(amountTL);
             }
-            catch (Exception ex)
+
+            // ── Kullanıcı ve paket yükle ─────────────────────────────────────
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user is null)
             {
-                _logger.LogError(ex, "❌ Kullanıcı veritabanından çekilirken hata | UserId={Id}", userId);
+                _logger.LogError("❌ Kullanıcı bulunamadı | UserId={Id}", userId);
                 return;
             }
 
-            _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}", 
+            _logger.LogInformation("✅ Kullanıcı bulundu | UserId={Id} | Email={Email} | Mevcut Kredi={Credits}",
                 userId, user.Email, user.Credits);
 
             var package = FindPackage(productCode);
-            
-            if (package is null) 
-            { 
-                _logger.LogError("❌ CRITICAL: Paket bulunamadı | ProductCode={Code}", productCode); 
-                return; 
+            if (package is null)
+            {
+                _logger.LogError("❌ Paket bulunamadı | ProductCode={Code}", productCode);
+                return;
             }
 
-            _logger.LogInformation("📦 Paket bulundu | ProductCode={Code} | Name={Name} | Credits={Cred} | IsCredit={IsCred} | PriceTry={Price}", 
-                package.ProductCode, package.Name, package.Credits, package.IsCredit, package.PriceTry);
+            _logger.LogInformation("📦 Paket bulundu | ProductCode={Code} | Name={Name} | Credits={Cred} | IsCredit={IsCred}",
+                package.ProductCode, package.Name, package.Credits, package.IsCredit);
 
             var oldCredits = user.Credits;
 
             if (package.IsCredit)
             {
-                // Kredi paketi → sadece kredi ekle
+                // Sadece kredi ekle
                 user.Credits += package.Credits;
-                _logger.LogInformation("💰 KREDİ EKLENİYOR | UserId={Id} | Eski={Old} | Eklenen={Add} | YENİ={New}", 
+                _logger.LogInformation("💰 KREDİ EKLENİYOR | UserId={Id} | Eski={Old} + Eklenen={Add} = Yeni={New}",
                     userId, oldCredits, package.Credits, user.Credits);
-
-                try
-                {
-                    _dbContext.Users.Update(user);
-                    await _dbContext.SaveChangesAsync();
-                    _logger.LogInformation("✅ Kullanıcı kredileri veritabanına kaydedildi | UserId={Id} | Credits={Credits}", userId, user.Credits);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "❌ Kullanıcı kredileri kaydedilirken hata oluştu | UserId={Id}", userId);
-                }
             }
             else
             {
-                // Üyelik paketi → üyelik süresini uzat VE kredileri ekle
-                var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+                // Üyelik paketi → üyelik uzat + kredi ekle
+                var now        = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
                 var oldPackage = user.PackageType;
-                var oldExpiry = user.MembershipEnd;
-                oldCredits = user.Credits; // ← mevcut krediyi sakla // ← mevcut krediyi sakla (üstteki oldCredits'i gölgeliyor, ayrı değişken)
+                var oldExpiry  = user.MembershipEnd;
 
-                user.PackageType    = package.Name;
+                user.PackageType     = package.Name;
                 user.MembershipStart = now;
                 user.MembershipEnd   = DateTime.SpecifyKind(now.AddDays(package.DurationDays), DateTimeKind.Utc);
-
-                // FIX #1 & #2: Üyelik paketleri de kredi içerir; mutlaka ekle
-                user.Credits += package.Credits;
-
-                // Eğer kullanıcı paket satın aldıysa (üyelik paketi), arama limitini 200'e yükselt
-                try
-                {
-                    var oldMax = user.MaxResultsPerSearch;
-                    user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
-                    _logger.LogInformation("🔼 MaxResultsPerSearch güncellendi | UserId={Id} | Eski={Old} | Yeni={New}", userId, oldMax, user.MaxResultsPerSearch);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "⚠️ MaxResultsPerSearch güncellenirken hata oluştu | UserId={Id}", userId);
-                }
+                user.Credits        += package.Credits;
+                user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
                 _logger.LogInformation(
-                    "👑 ÜYELİK + KREDİ AKTİFLEŞTİRİLİYOR | UserId={Id} | Eski={OldPkg} → YENİ={NewPkg} | " +
-                    "EskiBitiş={OldExp} → YeniBitiş={NewExp} | EskiKredi={OldCred} + Eklenen={Add} = YeniKredi={NewCred}",
+                    "👑 ÜYELİK + KREDİ AKTİFLEŞTİRİLİYOR | UserId={Id} | {OldPkg} → {NewPkg} | " +
+                    "Bitiş: {OldExp} → {NewExp} | Kredi: {OldCred} + {Add} = {NewCred}",
                     userId, oldPackage, package.Name, oldExpiry, user.MembershipEnd,
                     oldCredits, package.Credits, user.Credits);
-
-                try
-                {
-                    _dbContext.Users.Update(user);
-                    await _dbContext.SaveChangesAsync();
-                    _logger.LogInformation(
-                        "✅ Kullanıcı üyelik + kredi bilgileri kaydedildi | UserId={Id} | Package={Pkg} | MembershipEnd={End} | Credits={Cred}",
-                        userId, user.PackageType, user.MembershipEnd, user.Credits);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "❌ Kullanıcı üyelik/kredi bilgileri kaydedilirken hata | UserId={Id}", userId);
-                }
             }
 
-            // Duplicate kontrol - aynı OrderId ile başarılı bir kayıt var mı?
-            var existingHistory = await _dbContext.PaymentHistories
-                .FirstOrDefaultAsync(p => p.OrderId == (callback.OrderId ?? "") && p.Status == "SUCCESS");
-            
-            if (existingHistory != null)
+            _dbContext.Users.Update(user);
+
+            // ── PENDING kaydı SUCCESS'e güncelle ────────────────────────────
+            var pendingRecord = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == callback.OrderId && p.Status == "PENDING");
+
+            if (pendingRecord != null)
             {
-                _logger.LogWarning("⚠️ Bu OrderId için zaten başarılı bir PaymentHistory kaydı var, duplicate engellendi | OrderId={Oid} | ExistingId={Id}", 
-                    callback.OrderId, existingHistory.Id);
-                return; // Duplicate, işlemi sonlandır
+                pendingRecord.Status        = "SUCCESS";
+                pendingRecord.TransactionId = callback.TransactionId ?? "";
+                pendingRecord.Amount        = callback.Amount > 0 ? callback.Amount / 100m : pendingRecord.Amount;
+                pendingRecord.FinalAmount   = pendingRecord.Amount;
+                _dbContext.PaymentHistories.Update(pendingRecord);
+                _logger.LogInformation("✅ PENDING kayıt SUCCESS'e güncellendi | Id={Id} | OrderId={Oid}",
+                    pendingRecord.Id, callback.OrderId);
+            }
+            else
+            {
+                // PENDING kayıt yoksa yeni SUCCESS kaydı oluştur
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId        = userId,
+                    OrderId       = callback.OrderId ?? "",
+                    TransactionId = callback.TransactionId ?? "",
+                    ProductCode   = package.ProductCode,
+                    PackageName   = package.Name,
+                    Amount        = callback.Amount / 100m,
+                    Currency      = "TRY",
+                    CreditsAdded  = package.Credits,
+                    Status        = "SUCCESS",
+                    PaymentDate   = DateTime.UtcNow,
+                    FinalAmount   = callback.Amount / 100m,
+                });
+                _logger.LogInformation("💾 Yeni SUCCESS PaymentHistory kaydı oluşturuldu | OrderId={Oid}", callback.OrderId);
             }
 
-            // İndirim kodu kontrolü ve güncelleme
-            string? discountCode = null;
-            int? discountPercentage = null;
-            decimal finalAmount = callback.Amount / 100m;
+            // İndirim kodu güncelle
+            await ProcessDiscountCodeAsync(callback.ExtraParameters, callback.OrderId);
 
-            // ExtraParameters'dan indirim kodu bilgisini çıkarmaya çalış
-            if (!string.IsNullOrEmpty(callback.ExtraParameters))
-            {
-                try
-                {
-                    var extraParams = JsonSerializer.Deserialize<JsonElement>(callback.ExtraParameters);
-                    if (extraParams.TryGetProperty("discountCode", out var dcElement))
-                    {
-                        discountCode = dcElement.GetString();
-                        _logger.LogInformation("🎟️ ExtraParameters'dan indirim kodu bulundu | Code={Code}", discountCode);
-                    }
-                    if (extraParams.TryGetProperty("discountPercent", out var dpElement))
-                    {
-                        discountPercentage = dpElement.GetInt32();
-                        _logger.LogInformation("🎟️ ExtraParameters'dan indirim yüzdesi bulundu | Percent={Percent}%", discountPercentage);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "ExtraParameters parse edilemedi");
-                }
-            }
-
-            // İndirim kodu varsa işle
-            if (!string.IsNullOrWhiteSpace(discountCode))
-            {
-                var discountCodeEntity = await _dbContext.DiscountCodes
-                    .FirstOrDefaultAsync(dc => dc.Code == discountCode && dc.IsActive);
-
-                if (discountCodeEntity != null)
-                {
-                    _logger.LogInformation("🎟️ İndirim kodu veritabanında bulundu | Code={Code} | CurrentUses={Uses} | MaxUses={Max}", 
-                        discountCode, discountCodeEntity.CurrentUses, discountCodeEntity.MaxUses);
-
-                    // Kullanım sayısını artır
-                    discountCodeEntity.CurrentUses++;
-                    
-                    // Eğer ExtraParameters'dan alınamadıysa, veritabanından al
-                    if (!discountPercentage.HasValue)
-                    {
-                        discountPercentage = discountCodeEntity.DiscountPercentage;
-                        _logger.LogInformation("🎟️ İndirim yüzdesi veritabanından alındı | Percent={Percent}%", discountPercentage);
-                    }
-
-                    // Maksimum kullanım sayısına ulaşıldıysa kodu deaktif et
-                    if (discountCodeEntity.CurrentUses >= discountCodeEntity.MaxUses)
-                    {
-                        discountCodeEntity.IsActive = false;
-                        _logger.LogInformation("⚠️ İndirim kodu maksimum kullanım sayısına ulaştı, deaktif edildi | Code={Code} | Uses={Uses}", 
-                            discountCode, discountCodeEntity.CurrentUses);
-                    }
-
-                    _logger.LogInformation("✅ İndirim kodu kullanım sayısı güncellendi | Code={Code} | YeniUses={Uses} | Active={Active}", 
-                        discountCode, discountCodeEntity.CurrentUses, discountCodeEntity.IsActive);
-                }
-                else
-                {
-                    _logger.LogWarning("⚠️ İndirim kodu veritabanında bulunamadı veya aktif değil | Code={Code}", discountCode);
-                    discountCode = null; // Geçersiz kod, kaydetme
-                }
-            }
-
-            // PaymentHistory kaydı ekle
-            var paymentHistory = new PaymentHistory
-            {
-                UserId = userId,
-                OrderId = callback.OrderId ?? "",
-                TransactionId = callback.TransactionId ?? "",
-                ProductCode = package.ProductCode,
-                PackageName = package.Name,
-                Amount = callback.Amount / 100m,
-                Currency = "TRY",
-                CreditsAdded = package.Credits,  // ✅ TÜM paketler için kredi ekle (IsCredit kontrolü kaldırıldı)
-                Status = "SUCCESS",
-                PaymentDate = DateTime.UtcNow,
-                DiscountCode = discountCode,
-                DiscountPercentage = discountPercentage,
-                FinalAmount = finalAmount
-            };
-
-            _dbContext.PaymentHistories.Add(paymentHistory);
-            _logger.LogInformation("💾 PaymentHistory kaydı eklendi | OrderId={Oid} | Amount={Amt} TL | DiscountCode={DC} | Discount={Disc}% | FinalAmount={Final} | CreditsAdded={Cred}", 
-                callback.OrderId, paymentHistory.Amount, paymentHistory.DiscountCode, paymentHistory.DiscountPercentage, paymentHistory.FinalAmount, paymentHistory.CreditsAdded);
-
-            // KRİTİK: SaveChangesAsync
-            _logger.LogInformation("💾 💾 💾 SaveChangesAsync ÇAĞRILIYOR...");
+            _logger.LogInformation("💾 SaveChangesAsync çağrılıyor...");
             var changeCount = await _dbContext.SaveChangesAsync();
-            _logger.LogInformation("✅✅✅ VERİTABANI GÜNCELLENDİ | Değişiklik Sayısı={Count} | Yeni Kredi={Credits} | Yeni Paket={Pkg}", 
+            _logger.LogInformation("✅ VERİTABANI GÜNCELLENDİ | Değişiklik={Count} | Kredi={Credits} | Paket={Pkg}",
                 changeCount, user.Credits, user.PackageType);
 
-            // DOĞRULAMA: Veritabanından tekrar oku
             await _dbContext.Entry(user).ReloadAsync();
-            _logger.LogInformation("🔍 DOĞRULAMA (DB'den yeniden okundu) | UserId={Id} | Kredi={Credits} | Paket={Pkg} | Bitiş={End}", 
+            _logger.LogInformation("🔍 DOĞRULAMA | UserId={Id} | Kredi={Credits} | Paket={Pkg} | Bitiş={End}",
                 user.Id, user.Credits, user.PackageType, user.MembershipEnd);
 
             _logger.LogInformation("🎉🎉🎉 AKTİVASYON BAŞARILI | UserId={Id} | Kredi={Credits}", userId, user.Credits);
         }
-        catch (Exception ex) 
-        { 
-            _logger.LogError(ex, "❌❌❌ AKTİVASYON HATASI | OrderId={Oid} | Message={Msg} | StackTrace={Stack}", 
-                callback.OrderId, ex.Message, ex.StackTrace); 
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌❌❌ AKTİVASYON HATASI | OrderId={Oid}", callback.OrderId);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TOSLA INQUIRY
+    // ─────────────────────────────────────────────────────────────────────────
+    public async Task<ToslaInquiryResponseDto?> InquiryPaymentAsync(string orderId)
+    {
+        try
+        {
+            _logger.LogInformation("🔍 Tosla Inquiry | OrderId={Oid}", orderId);
+
+            var rnd      = Random.Shared.Next(100000, 999999).ToString();
+            var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
+            var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
+
+            var requestBody = new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId };
+            var body    = JsonSerializer.Serialize(requestBody);
+
+            _logger.LogInformation("📤 Tosla Inquiry Request | Body={Body}", body);
+
+            var resp = await _httpClient.PostAsync($"{_baseUrl}/inquiry",
+                new StringContent(body, Encoding.UTF8, "application/json"));
+            var raw  = await resp.Content.ReadAsStringAsync();
+
+            _logger.LogInformation("📥 Tosla Inquiry Response | Status={Status} | Body={Body}", (int)resp.StatusCode, raw);
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("❌ Tosla Inquiry başarısız | Status={Status}", (int)resp.StatusCode);
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<ToslaInquiryResponseDto>(raw,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Tosla Inquiry hatası | OrderId={Oid}", orderId);
+            return null;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FRONTEND TETİKLEMLİ DOĞRULAMA
+    // ─────────────────────────────────────────────────────────────────────────
+    public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string orderId)
+    {
+        try
+        {
+            _logger.LogInformation("🔍 ÖDEME DOĞRULAMA | OrderId={Oid}", orderId);
+
+            // Zaten işlenmiş mi?
+            var existingPayment = await _dbContext.PaymentHistories
+                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
+                .FirstOrDefaultAsync();
+
+            if (existingPayment != null)
+            {
+                _logger.LogInformation("ℹ️ Zaten işlenmiş | OrderId={Oid} | Credits={Cred}",
+                    orderId, existingPayment.CreditsAdded);
+                return new PaymentVerificationResult
+                {
+                    Success            = true,
+                    IsAlreadyProcessed = true,
+                    CreditsAdded       = existingPayment.CreditsAdded,
+                    PackageName        = existingPayment.PackageName,
+                    UserId             = existingPayment.UserId,
+
+                };
+            }
+
+            // Tosla'dan sorgula
+            var inquiry = await InquiryPaymentAsync(orderId);
+            if (inquiry == null || inquiry.Code != 0)
+            {
+                return new PaymentVerificationResult
+                {
+                    Success      = false,
+                    ErrorMessage = inquiry?.Message ?? "Ödeme sorgulanamadı"
+                };
+            }
+
+            var transaction = inquiry.Transactions?.FirstOrDefault();
+            if (transaction == null)
+            {
+                return new PaymentVerificationResult
+                {
+                    Success      = false,
+                    ErrorMessage = "İşlem detayları bulunamadı"
+                };
+            }
+
+            if (transaction.BankResponseCode != "00")
+            {
+                await SaveFailedPaymentFromInquiry(orderId, transaction);
+                return new PaymentVerificationResult
+                {
+                    Success      = false,
+                    ErrorMessage = $"Ödeme başarısız: {transaction.BankResponseMessage}"
+                };
+            }
+
+            // Başarılı → aktivasyon
+            var callbackDto = new ToslaCallbackDto
+            {
+                Code                = 0,
+                Message             = "Başarılı (Verified)",
+                OrderId             = orderId,
+                BankResponseCode    = transaction.BankResponseCode,
+                BankResponseMessage = transaction.BankResponseMessage,
+                TransactionId       = transaction.TransactionId.ToString(),
+                AuthCode            = transaction.AuthCode,
+                Amount              = transaction.Amount,
+                RequestStatus       = 1
+            };
+
+            await ActivateMembershipAsync(callbackDto);
+
+            var payment = await _dbContext.PaymentHistories
+                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
+                .FirstOrDefaultAsync();
+
+            if (payment == null)
+            {
+                return new PaymentVerificationResult
+                {
+                    Success      = false,
+                    ErrorMessage = "Ödeme işlendi ama kayıt bulunamadı"
+                };
+            }
+
+            return new PaymentVerificationResult
+            {
+                Success            = true,
+                IsAlreadyProcessed = false,
+                CreditsAdded       = payment.CreditsAdded,
+                PackageName        = payment.PackageName ?? "Bilinmeyen",
+                UserId             = payment.UserId,
+
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Ödeme doğrulama hatası | OrderId={Oid}", orderId);
+            return new PaymentVerificationResult
+            {
+                Success      = false,
+                ErrorMessage = "Sistem hatası: " + ex.Message
+            };
+        }
+    }
+
+    public List<FgsTradePackage> GetAvailablePackages() => _packages;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // YARDIMCI METODLAR
+    // ─────────────────────────────────────────────────────────────────────────
 
     private async Task SaveFailedPaymentAsync(ToslaCallbackDto callback)
     {
         try
         {
-            var userIdStr = (callback.Echo ?? "").Split('|').FirstOrDefault() ?? "";
-            if (!int.TryParse(userIdStr, out int userId)) return;
-            _dbContext.PaymentHistories.Add(new PaymentHistory
+            // Önce PENDING kaydı FAILED yap
+            var pending = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == callback.OrderId && p.Status == "PENDING");
+
+            if (pending != null)
             {
-                UserId = userId, OrderId = callback.OrderId ?? "",
-                TransactionId = callback.TransactionId ?? "",
-                Amount = callback.Amount / 100m, Currency = "TRY",
-                Status = "FAILED", PaymentDate = DateTime.UtcNow,
-                ErrorMessage = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}"
-            });
+                pending.Status       = "FAILED";
+                pending.ErrorMessage = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}";
+                _dbContext.PaymentHistories.Update(pending);
+            }
+            else
+            {
+                var userIdStr = (callback.Echo ?? "").Split('|').FirstOrDefault() ?? "";
+                if (!int.TryParse(userIdStr, out int userId) &&
+                    !string.IsNullOrEmpty(callback.OrderId) &&
+                    callback.OrderId.StartsWith("FGS") &&
+                    callback.OrderId.Length > 13)
+                {
+                    int.TryParse(callback.OrderId.Substring(13).TrimStart('0'), out userId);
+                }
+
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId        = userId,
+                    OrderId       = callback.OrderId ?? "",
+                    TransactionId = callback.TransactionId ?? "",
+                    Amount        = callback.Amount / 100m,
+                    Currency      = "TRY",
+                    Status        = "FAILED",
+                    PaymentDate   = DateTime.UtcNow,
+                    ErrorMessage  = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}"
+                });
+            }
+
             await _dbContext.SaveChangesAsync();
         }
-        catch (Exception ex) { _logger.LogError(ex, "Başarısız ödeme kaydı hatası"); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Başarısız ödeme kaydı hatası");
+        }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    private async Task SaveFailedPaymentFromInquiry(string orderId, ToslaTransactionDto transaction)
+    {
+        try
+        {
+            var pending = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == orderId && p.Status == "PENDING");
+
+            if (pending != null)
+            {
+                pending.Status       = "FAILED";
+                pending.ErrorMessage = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}";
+                _dbContext.PaymentHistories.Update(pending);
+            }
+            else
+            {
+                string userIdStr = "";
+                if (!string.IsNullOrEmpty(orderId) && orderId.StartsWith("FGS") && orderId.Length > 13)
+                    userIdStr = orderId.Substring(13).TrimStart('0');
+
+                int.TryParse(userIdStr, out int userId);
+                _dbContext.PaymentHistories.Add(new PaymentHistory
+                {
+                    UserId        = userId,
+                    OrderId       = orderId,
+                    TransactionId = transaction.TransactionId.ToString(),
+                    Amount        = transaction.Amount / 100m,
+                    Currency      = "TRY",
+                    Status        = "FAILED",
+                    PaymentDate   = DateTime.UtcNow,
+                    ErrorMessage  = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}"
+                });
+            }
+
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Başarısız ödeme kaydı hatası (inquiry)");
+        }
+    }
+
+    private async Task UpdatePendingToFailed(string orderId, string reason)
+    {
+        try
+        {
+            var pending = await _dbContext.PaymentHistories
+                .FirstOrDefaultAsync(p => p.OrderId == orderId && p.Status == "PENDING");
+            if (pending != null)
+            {
+                pending.Status       = "FAILED";
+                pending.ErrorMessage = reason;
+                _dbContext.PaymentHistories.Update(pending);
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PENDING→FAILED güncelleme hatası | OrderId={Oid}", orderId);
+        }
+    }
+
+    private async Task ProcessDiscountCodeAsync(string? extraParameters, string? orderId)
+    {
+        if (string.IsNullOrEmpty(extraParameters)) return;
+
+        try
+        {
+            var extra = JsonSerializer.Deserialize<JsonElement>(extraParameters);
+            if (!extra.TryGetProperty("discountCode", out var dcEl)) return;
+
+            var discountCode = dcEl.GetString();
+            if (string.IsNullOrWhiteSpace(discountCode)) return;
+
+            var entity = await _dbContext.DiscountCodes
+                .FirstOrDefaultAsync(dc => dc.Code == discountCode && dc.IsActive);
+
+            if (entity == null) return;
+
+            entity.CurrentUses++;
+            if (entity.CurrentUses >= entity.MaxUses)
+            {
+                entity.IsActive = false;
+                _logger.LogInformation("⚠️ İndirim kodu deaktif edildi | Code={Code}", discountCode);
+            }
+
+            _logger.LogInformation("🎟️ İndirim kodu kullanıldı | Code={Code} | Uses={Uses}", discountCode, entity.CurrentUses);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "İndirim kodu işleme hatası | OrderId={Oid}", orderId);
+        }
+    }
+
     private FgsTradePackage? FindPackage(string code)
     {
         if (string.IsNullOrWhiteSpace(code)) return null;
 
-        // Önce tam eşleşme dene
         var exact = _packages.FirstOrDefault(p =>
             p.ProductCode == code ||
             p.Alias.Equals(code, StringComparison.OrdinalIgnoreCase) ||
-            p.Name.Equals(code,  StringComparison.OrdinalIgnoreCase));
+            p.Name.Equals(code, StringComparison.OrdinalIgnoreCase));
         if (exact != null) return exact;
 
-        // Frontend'den gelen kısa isimler için fallback haritası
-        // Örn: "professional" → "pro_monthly", "business" → "business_monthly"
         var aliasMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             { "starter",      "starter_monthly"  },
-            { "basic",        "basic_monthly"    },
+            { "basic",        "starter_monthly"  },
             { "professional", "pro_monthly"      },
             { "pro",          "pro_monthly"      },
             { "business",     "business_monthly" },
-            { "enterprise",   "enterprise_yearly"},
-            { "ultimate",     "ultimate_yearly"  },
+            { "enterprise",   "business_yearly"  },
         };
 
         if (aliasMap.TryGetValue(code, out var mappedAlias))
@@ -707,26 +862,22 @@ public class ToslaPaymentService : IToslaPaymentService
         return null;
     }
 
-    /// <summary>
-    /// Amount'a göre ProductCode tahmin et (Echo/ExtraParameters gelmediğinde fallback)
-    /// </summary>
     private string GuessProductCodeFromAmount(decimal amountTL)
     {
-        // Tutara göre en yakın paketi bul
         var package = _packages
+            .Where(p => p.PriceTry > 0)
             .OrderBy(p => Math.Abs(p.PriceTry - amountTL))
             .FirstOrDefault();
 
         if (package != null)
         {
-            _logger.LogInformation("💡 Amount'dan paket tahmin edildi | Amount={Amt} TL → {Pkg} ({Code})", 
+            _logger.LogInformation("💡 Amount'dan paket tahmin | Amount={Amt} TL → {Pkg} ({Code})",
                 amountTL, package.Name, package.ProductCode);
             return package.ProductCode;
         }
 
-        // Hiç paket bulunamazsa, default olarak 1 TL için Starter dön
-        _logger.LogWarning("⚠️ Amount'a uygun paket bulunamadı, default Starter kullanılıyor | Amount={Amt}", amountTL);
-        return "1274715"; // Starter Monthly
+        _logger.LogWarning("⚠️ Tahmin başarısız, default Starter | Amount={Amt}", amountTL);
+        return "1274715";
     }
 
     private static string ComputeHash(string input)
@@ -753,181 +904,9 @@ public class ToslaPaymentService : IToslaPaymentService
                      : v.ValueKind == JsonValueKind.Number ? v.GetInt64().ToString() : null;
         return null;
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // FRONTEND-TETİKLEMLİ ÖDEME DOĞRULAMA
-    // ─────────────────────────────────────────────────────────────────────────
-    
-    /// <summary>
-    /// Frontend'den gelen verify isteği ile ödemeyi Tosla'dan sorgulayıp işle
-    /// </summary>
-    public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string orderId)
-    {
-        try
-        {
-            _logger.LogInformation("🔍 ÖDEME DOĞRULAMA BAŞLADI | OrderId={Oid}", orderId);
-
-            // 1. Daha önce işlenmiş mi kontrol et
-            var existingPayment = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
-                .FirstOrDefaultAsync();
-
-            if (existingPayment != null)
-            {
-                _logger.LogInformation("ℹ️ Ödeme zaten işlenmiş | OrderId={Oid} | UserId={Uid} | Credits={Cred}",
-                    orderId, existingPayment.UserId, existingPayment.CreditsAdded);
-
-                return new PaymentVerificationResult
-                {
-                    Success = true,
-                    IsAlreadyProcessed = true,
-                    CreditsAdded = existingPayment.CreditsAdded,
-                    PackageName = existingPayment.PackageName,
-                    UserId = existingPayment.UserId
-                };
-            }
-
-            // 2. Tosla'dan ödeme durumunu sorgula
-            _logger.LogInformation("📞 Tosla'dan ödeme durumu sorgulanıyor | OrderId={Oid}", orderId);
-            var inquiry = await InquiryPaymentAsync(orderId);
-
-            if (inquiry == null || inquiry.Code != 0)
-            {
-                _logger.LogWarning("❌ Tosla inquiry başarısız | Code={Code} | Message={Msg}",
-                    inquiry?.Code, inquiry?.Message);
-                return new PaymentVerificationResult
-                {
-                    Success = false,
-                    ErrorMessage = inquiry?.Message ?? "Ödeme sorgulanamadı"
-                };
-            }
-
-            // 3. Transaction detaylarını al
-            var transaction = inquiry.Transactions?.FirstOrDefault();
-            if (transaction == null)
-            {
-                _logger.LogWarning("❌ Transaction bulunamadı | OrderId={Oid}", orderId);
-                return new PaymentVerificationResult
-                {
-                    Success = false,
-                    ErrorMessage = "İşlem detayları bulunamadı"
-                };
-            }
-
-            _logger.LogInformation("📋 Transaction bulundu | OrderId={Oid} | TxId={TxId} | BankCode={Code} | Amount={Amt}",
-                orderId, transaction.TransactionId, transaction.BankResponseCode, transaction.Amount);
-
-            // 4. Ödeme başarılı mı kontrol et
-            if (transaction.BankResponseCode != "00")
-            {
-                _logger.LogWarning("❌ Ödeme başarısız | BankCode={Code} | Message={Msg}",
-                    transaction.BankResponseCode, transaction.BankResponseMessage);
-
-                // Başarısız ödemeyi kaydet
-                await SaveFailedPaymentFromInquiry(orderId, transaction);
-
-                return new PaymentVerificationResult
-                {
-                    Success = false,
-                    ErrorMessage = $"Ödeme başarısız: {transaction.BankResponseMessage}"
-                };
-            }
-
-            // 5. BAŞARILI ÖDEME - Callback simülasyonu yap
-            _logger.LogInformation("✅ Ödeme başarılı doğrulandı, aktivasyon yapılıyor | OrderId={Oid}", orderId);
-
-            var callbackDto = new ToslaCallbackDto
-            {
-                Code = 0,
-                Message = "Başarılı (Verified)",
-                OrderId = orderId,
-                BankResponseCode = transaction.BankResponseCode,
-                BankResponseMessage = transaction.BankResponseMessage,
-                TransactionId = transaction.TransactionId.ToString(),
-                AuthCode = transaction.AuthCode,
-                Amount = transaction.Amount,
-                RequestStatus = 1
-            };
-
-            // Aktivasyon işlemini yap
-            await ActivateMembershipAsync(callbackDto);
-
-            // 6. Sonuç bilgilerini al
-            var payment = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == orderId && p.Status == "SUCCESS")
-                .FirstOrDefaultAsync();
-
-            if (payment == null)
-            {
-                _logger.LogError("❌ CRITICAL: Aktivasyon başarılı ama PaymentHistory bulunamadı | OrderId={Oid}", orderId);
-                return new PaymentVerificationResult
-                {
-                    Success = false,
-                    ErrorMessage = "Ödeme işlendi ama kayıt bulunamadı"
-                };
-            }
-
-            _logger.LogInformation("🎉 ÖDEME DOĞRULAMA TAMAMLANDI | OrderId={Oid} | UserId={Uid} | Credits={Cred}",
-                orderId, payment.UserId, payment.CreditsAdded);
-
-            return new PaymentVerificationResult
-            {
-                Success = true,
-                IsAlreadyProcessed = false,
-                CreditsAdded = payment.CreditsAdded,
-                PackageName = payment.PackageName ?? "Bilinmeyen",
-                UserId = payment.UserId
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Ödeme doğrulama hatası | OrderId={Oid}", orderId);
-            return new PaymentVerificationResult
-            {
-                Success = false,
-                ErrorMessage = "Sistem hatası: " + ex.Message
-            };
-        }
-    }
-
-    /// <summary>
-    /// Başarısız ödemeyi inquiry'den kaydet
-    /// </summary>
-    private async Task SaveFailedPaymentFromInquiry(string orderId, ToslaTransactionDto transaction)
-    {
-        try
-        {
-            // OrderId'den UserId çıkar
-            string userIdStr = "";
-            if (!string.IsNullOrEmpty(orderId) && orderId.StartsWith("FGS") && orderId.Length > 13)
-            {
-                userIdStr = orderId.Substring(13).TrimStart('0');
-            }
-
-            if (int.TryParse(userIdStr, out int userId))
-            {
-                _dbContext.PaymentHistories.Add(new PaymentHistory
-                {
-                    UserId = userId,
-                    OrderId = orderId,
-                    TransactionId = transaction.TransactionId.ToString(),
-                    Amount = transaction.Amount / 100m,
-                    Currency = "TRY",
-                    Status = "FAILED",
-                    PaymentDate = DateTime.UtcNow,
-                    ErrorMessage = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}"
-                });
-                await _dbContext.SaveChangesAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Başarısız ödeme kaydı hatası (inquiry)");
-        }
-    }
 }
 
-// ─── Inquiry DTOs ─────────────────────────────────────────────────────────────
+// ─── DTOs ────────────────────────────────────────────────────────────────────
 public class ToslaInquiryResponseDto
 {
     public int Code { get; set; }
