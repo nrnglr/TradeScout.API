@@ -52,12 +52,12 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly List<FgsTradePackage> _packages = new()
     {
         // Aylık paketler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=450m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1170m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2385m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=470m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1222m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2491m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
 
         // Yıllık paketler
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
+        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3243m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
         new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık", PriceUsd=199m,  PriceTry=8955m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
         new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",          PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
 
