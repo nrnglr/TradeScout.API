@@ -280,6 +280,14 @@ builder.Services.AddHttpClient("ResendClient", client =>
     }
 });
 
+// SSL sertifika hatalarını yoksayan özel HttpClient (Web scraping ve doğrulama için)
+builder.Services.AddHttpClient("WebsiteValidator")
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true,
+        AllowAutoRedirect = true
+    });
+
 // Register generic HttpClient
 builder.Services.AddHttpClient();
 
@@ -349,8 +357,8 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
-app.UseRateLimiter(); // Rate limiting — routing'den önce olmalı
 app.UseRouting();
+app.UseRateLimiter(); // Rate limiting — routing'den önce olmalı
 // ⚠️ CORS middleware - Hataların CORS başlıkları kaybetmemesi için erken konumlandı
 app.UseCors("AllowReactApp");
 

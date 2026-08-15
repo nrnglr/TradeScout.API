@@ -171,22 +171,65 @@ public class GeminiSearchService : IGeminiSearchService
     {
         try
         {
-            _logger.LogInformation("🚀 TradeScout Discovery Başlatıldı: {Sector} / {City}", sector, city);
+            _logger.LogInformation("🚀 TradeScout Discovery Başlatıldı: {Sector} / {City} (Hedef: {Max})", sector, city, maxResults);
 
-            string location;
-            if (string.IsNullOrWhiteSpace(city))
-                location = country ?? "Turkey";
-            else
-                location = string.IsNullOrEmpty(country) ? city : $"{city}, {country}";
+            var prompts = new List<string>();
+            string location = string.IsNullOrWhiteSpace(city) ? (country ?? "Turkey") : (string.IsNullOrEmpty(country) ? city : $"{city}, {country}");
+            
+            bool isCountryWide = string.IsNullOrWhiteSpace(city) || city.Equals("Turkey", StringComparison.OrdinalIgnoreCase) || city.Equals("Türkiye", StringComparison.OrdinalIgnoreCase);
 
-            // 4 farklı strateji ile paralel arama
-            var tasks = new[]
+            if (isCountryWide)
             {
-                CallGeminiDiscoveryAsync(BuildDiscoveryPrompt(sector, location, maxResults, 0), sector, city, country, 0, cancellationToken),
-                CallGeminiDiscoveryAsync(BuildDiscoveryPrompt(sector + " manufacturer exporter", location, maxResults, 1), sector, city, country, 1, cancellationToken),
-                CallGeminiDiscoveryAsync(BuildDiscoveryPrompt(sector + " wholesaler supplier", location, maxResults, 2), sector, city, country, 2, cancellationToken),
-                CallGeminiDiscoveryAsync(BuildDiscoveryPrompt(sector + " üretici toptancı ihracatçı", location, maxResults, 3), sector, city, country, 3, cancellationToken),
-            };
+                // 1. Ülke genelinde sanayi havzalarına bölerek arama yap
+                var industrialHubs = new[]
+                {
+                    "İstanbul İkitelli Tuzla Gebze",
+                    "Bursa Nilüfer DOSAB NOSAB",
+                    "Ankara OSTİM İvedik Sincan OSB",
+                    "İzmir Kemalpaşa Çiğli Aliağa OSB",
+                    "Konya Sanayi Sitesi Kayseri OSB",
+                    "Kocaeli Dilovası Sakarya OSB",
+                    "Gaziantep OSB Adana Sanayi",
+                    "Manisa OSB Eskişehir Sanayi"
+                };
+
+                // İstenen sayıya göre havza sayısını seç (100 firma için 8 havzanın tamamı taranır)
+                int hubCount = maxResults > 50 ? 8 : (maxResults > 25 ? 5 : 3);
+
+                for (int i = 0; i < hubCount; i++)
+                {
+                    prompts.Add(BuildDiscoveryPrompt(
+                        $"{sector} üretici fabrika {industrialHubs[i]}",
+                        industrialHubs[i],
+                        15, i)); // Her task'ten max 15 aday bekliyoruz
+                }
+
+                // B2B ve Sanayi Portalları için ek derin sorgular (Sayı yüksekse)
+                if (maxResults >= 50)
+                {
+                    prompts.Add(BuildDiscoveryPrompt($"{sector} site:kompass.com/c/turkey OR site:europages.com", "Turkey", 15, prompts.Count));
+                    prompts.Add(BuildDiscoveryPrompt($"{sector} galvano yüzey işlem sanayi sitesi rehberi", "Turkey", 15, prompts.Count + 1));
+                }
+            }
+            else
+            {
+                // 2. Şehir bazlı spesifik aramalarda alt sanayi ve terim odaklı dallanma
+                prompts.Add(BuildDiscoveryPrompt($"{sector} üretici fabrika {city}", city, 15, 0));
+                prompts.Add(BuildDiscoveryPrompt($"{sector} organize sanayi bölgesi {city}", city, 15, 1));
+                prompts.Add(BuildDiscoveryPrompt($"{sector} fason imalat sanayi sitesi {city}", city, 15, 2));
+                prompts.Add(BuildDiscoveryPrompt($"{sector} site:linkedin.com/company {city}", city, 15, 3));
+                
+                if (maxResults > 25)
+                {
+                    prompts.Add(BuildDiscoveryPrompt($"{sector} toptan imalatçılar {city}", city, 15, 4));
+                    prompts.Add(BuildDiscoveryPrompt($"{sector} sanayi ticaret odası üye listesi {city}", city, 15, 5));
+                }
+            }
+
+            // Task'leri paralel olarak çalıştır
+            var tasks = prompts.Select((p, idx) =>
+                CallGeminiDiscoveryAsync(p, sector, city, country, idx, cancellationToken)
+            ).ToList();
 
             await Task.WhenAll(tasks);
 
@@ -197,10 +240,12 @@ public class GeminiSearchService : IGeminiSearchService
                 .Select(g => g.First())
                 .ToList();
 
-            _logger.LogInformation("🔍 Toplam {Count} benzersiz sonuç bulundu. Web siteleri doğrulanıyor...", allFound.Count);
+            _logger.LogInformation("🔍 Toplam {Count} benzersiz ham aday bulundu. Web siteleri doğrulanıyor...", allFound.Count);
 
             var verifiedBusinesses = new List<BusinessDto>();
-            using var client = _httpClientFactory.CreateClient();
+            
+            // ÖNEMLİ DÜZELTME: Program.cs'de yapılandırdığımız ve SSL hatalarını es geçen client'ı kullanıyoruz
+            using var client = _httpClientFactory.CreateClient("WebsiteValidator");
             client.Timeout = TimeSpan.FromSeconds(5);
 
             foreach (var business in allFound)
@@ -231,15 +276,27 @@ public class GeminiSearchService : IGeminiSearchService
         }
     }
 
+    // SSL Hataları için HTTP Fallback eklendi
     private async Task<bool> CheckIfWebsiteIsReal(HttpClient client, string url)
+    {
+        var cleanUrl = url.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+        
+        // Önce HTTPS dene
+        if (await TryUrlAsync(client, "https://" + cleanUrl)) return true;
+
+        // HTTPS başarısız olursa HTTP dene
+        return await TryUrlAsync(client, "http://" + cleanUrl);
+    }
+
+    private async Task<bool> TryUrlAsync(HttpClient client, string url)
     {
         try
         {
-            if (!url.StartsWith("http")) url = "https://" + url;
             var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("User-Agent", "Mozilla/5.0 (compatible; TradeScout/1.0)");
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-            var validCodes = new[] { 200, 301, 302, 403, 405, 406 };
+            var validCodes = new[] { 200, 301, 302, 403, 405, 406 }; // 403, 405 ve 406 dönen siteler aktif ama bot korumalı
             return validCodes.Contains((int)response.StatusCode);
         }
         catch
@@ -273,7 +330,6 @@ public class GeminiSearchService : IGeminiSearchService
 
                     var apiUrl = $"{GEMINI_API_BASE}?key={apiKey}";
 
-                    // Discovery: googleSearch tool aktif, responseMimeType YOK (tool use ile çakışır)
                     var requestBody = new
                     {
                         contents = new[]
@@ -345,30 +401,21 @@ public class GeminiSearchService : IGeminiSearchService
         return new List<BusinessDto>();
     }
 
-    private string BuildDiscoveryPrompt(string sector, string location, int targetCount, int batchIndex)
+    private string BuildDiscoveryPrompt(string sectorQuery, string location, int targetCount, int batchIndex)
     {
+        // DÜZELTME 3: Gemini'nin gevezelik yapmasını yasaklayan katı kurallar eklendi
         return $@"# ROLE
 You are a Senior B2B Trade Intelligence Specialist. Find REAL, ACTIVE businesses only.
 
 # GOAL
-Find {targetCount} real businesses operating in: {sector} / {location}
+Find real businesses matching this exact search intent: {sectorQuery} in {location}
 
 # SEARCH STRATEGY
-1. Search Google: site:linkedin.com/company ""{sector}"" ""{location}""
-2. Search trade directories: kompass.com, europages.com, alibaba.com for ""{sector}"" in ""{location}""
-3. Search local chambers of commerce and industry associations in {location}
-4. Search: ""{sector} manufacturer {location}"", ""{sector} exporter {location}"", ""{sector} wholesaler {location}""
-5. Dig deeper — look for SMEs and companies in local industrial zones (OSB/Sanayi Sitesi)
-6. Do NOT only list the top 10 most famous companies — find lesser-known real businesses too
+1. Perform Google Search focusing directly on the query: ""{sectorQuery}""
+2. Find SMEs and companies that actively produce or sell in this sector
+3. Do NOT only list the top 10 most famous companies — find lesser-known real businesses too
 
-# CRITICAL RULES
-- Only include companies with a REAL, WORKING website URL
-- Email address must match the company's own domain (not gmail/hotmail)
-- Return as many REAL companies as you can find, up to {targetCount}
-- It is better to return 5 real companies than 50 fake ones
-- Do NOT invent any data
-
-# OUTPUT FORMAT — ONLY A VALID JSON ARRAY, NO OTHER TEXT
+# OUTPUT FORMAT
 [
   {{
     ""businessName"": ""Company Name"",
@@ -378,11 +425,19 @@ Find {targetCount} real businesses operating in: {sector} / {location}
     ""contextualData"": ""One sentence about their main products or exports."",
     ""hsCodes"": [""1234""],
     ""confidenceScore"": 0.9,
-    ""category"": ""{sector}"",
+    ""category"": ""{sectorQuery.Split(' ')[0]}"",
     ""city"": ""{location.Split(',')[0].Trim()}"",
     ""country"": ""{(location.Contains(",") ? location.Split(',').Last().Trim() : location)}""
   }}
-]";
+]
+
+# CRITICAL OUTPUT RULES - READ CAREFULLY
+1. You are an automated data pipeline. You MUST NOT output any conversational text.
+2. DO NOT say ""Here are the results"", ""I found..."", or ""I was unable to find"".
+3. Your ENTIRE response must start with the character '[' and end with ']'.
+4. If you cannot find any businesses, return an empty array: []
+5. Only include companies with a REAL, WORKING website URL
+6. Do NOT invent any data";
     }
 
     private List<BusinessDto> ParseDiscoveryResponse(string responseText, string sector, string city, string? country)
@@ -497,11 +552,8 @@ Find {targetCount} real businesses operating in: {sector} / {location}
             using var httpClient = _httpClientFactory.CreateClient();
             httpClient.Timeout = TimeSpan.FromMinutes(3);
 
-            // DÜZELTME: Temiz URL — markdown formatı yok
             var apiUrl = $"{GEMINI_API_BASE}?key={apiKey}";
 
-            // DÜZELTME: googleSearch tool kullanılırken responseMimeType OLMAMALI
-            // İkisi birlikte kullanılınca Gemini boş/hatalı yanıt döndürür
             var requestBody = new
             {
                 contents = new[]
@@ -515,7 +567,6 @@ Find {targetCount} real businesses operating in: {sector} / {location}
                 generationConfig = new
                 {
                     temperature = 0.1
-                    // responseMimeType KASITLI OLARAK KALDIRILDI
                 }
             };
 
@@ -591,7 +642,8 @@ STRICT RULES:
 - Do NOT invent or guess any email address or phone number
 - Email must be from the company's own domain — no gmail/hotmail
 - Phone numbers must include country code (e.g. +90 for Turkey)
-- Return exactly {batch.Count} objects in the array, one per company";
+- Return exactly {batch.Count} objects in the array, one per company
+- MUST NOT output any conversational text like ""Here are the results"".";
     }
 
     private List<BusinessDto> ParseEnrichmentResponse(string responseText, List<BusinessDto> originalBatch)
@@ -622,8 +674,8 @@ STRICT RULES:
                 if (HasValidContactInfo(enrichment.Email))
                     business.Email = enrichment.Email;
 
-                if (HasValidContactInfo(enrichment.Mobile))
-                    business.Mobile = enrichment.Mobile;
+                if (HasValidContactInfo(enrichment.Phone))
+                    business.Mobile = enrichment.Phone;
 
                 if (HasValidContactInfo(enrichment.SocialMedia))
                     business.SocialMedia = enrichment.SocialMedia;
@@ -654,7 +706,6 @@ STRICT RULES:
         {
             var jsonResponse = JsonDocument.Parse(responseContent);
 
-            // finishReason kontrolü
             var candidates = jsonResponse.RootElement.GetProperty("candidates");
             if (candidates.GetArrayLength() == 0)
             {
@@ -664,7 +715,6 @@ STRICT RULES:
 
             var firstCandidate = candidates[0];
 
-            // RECITATION veya SAFETY engelini kontrol et
             if (firstCandidate.TryGetProperty("finishReason", out var finishReason))
             {
                 var reason = finishReason.GetString();
@@ -777,7 +827,7 @@ STRICT RULES:
     {
         public int Index { get; set; }
         public string? Email { get; set; }
-        public string? Mobile { get; set; }
+        public string? Phone { get; set; }
         public string? SocialMedia { get; set; }
         public string? DecisionMaker { get; set; }
         public string? TriggerEvent { get; set; }
