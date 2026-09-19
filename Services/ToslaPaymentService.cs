@@ -43,30 +43,30 @@ public class ToslaPaymentService : IToslaPaymentService
     private readonly ILogger<ToslaPaymentService> _logger;
     private readonly ApplicationDbContext _dbContext;
 
-    private readonly long   _clientId;
+    private readonly long _clientId;
     private readonly string _apiUser;
     private readonly string _apiPass;
     private readonly string _baseUrl;
     private readonly string _callbackUrl;
 
     private readonly List<FgsTradePackage> _packages = new()
-    {
-        // Aylık paketler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=470m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1222m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2491m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
+{
+    // Aylık paketler
+    new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",          PriceUsd=10m,   PriceTry=490m,   Credits=5,   DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Starter Aylık Üyelik" },
+    new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",        PriceUsd=26m,   PriceTry=1274m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Pro Aylık Üyelik" },
+    new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                 PriceUsd=53m,   PriceTry=2597m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false, Description="Business Aylık Üyelik" },
 
-        // Yıllık paketler
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3243m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık", PriceUsd=199m,  PriceTry=8955m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",          PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
+    // Yıllık paketler
+    new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3381m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Starter Yıllık Üyelik" },
+    new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık", PriceUsd=199m,  PriceTry=9751m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Pro Yıllık Üyelik" },
+    new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",          PriceUsd=399m,  PriceTry=19551m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false, Description="Business Yıllık Üyelik" },
 
-        // Extra Kredi paketleri
-        new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=450m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="10 Ekstra Kredi" },
-        new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=900m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="25 Ekstra Kredi" },
-        new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1575m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="50 Ekstra Kredi" },
-        new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2700m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="100 Ekstra Kredi" },
-    };
+    // Extra Kredi paketleri
+    new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=490m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="10 Ekstra Kredi" },
+    new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=980m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="25 Ekstra Kredi" },
+    new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1715m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="50 Ekstra Kredi" },
+    new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2940m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true, Description="100 Ekstra Kredi" },
+};
 
     public ToslaPaymentService(
         HttpClient httpClient,
@@ -75,8 +75,8 @@ public class ToslaPaymentService : IToslaPaymentService
         ApplicationDbContext dbContext)
     {
         _httpClient = httpClient;
-        _logger     = logger;
-        _dbContext  = dbContext;
+        _logger = logger;
+        _dbContext = dbContext;
 
         var clientIdStr = (Environment.GetEnvironmentVariable("TOSLA_CLIENT_ID")
             ?? configuration["ToslaSettings:ClientId"] ?? "").Trim();
@@ -151,7 +151,7 @@ public class ToslaPaymentService : IToslaPaymentService
             }
 
             // Hash parametreleri
-            var rnd      = Random.Shared.Next(100000, 999999).ToString();
+            var rnd = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
             var hashInput = _apiPass + _clientId + _apiUser + rnd + timeSpan;
             var hash = ComputeHash(hashInput);
@@ -162,8 +162,8 @@ public class ToslaPaymentService : IToslaPaymentService
             _logger.LogInformation("HASH OUTPUT: '{Hash}'", hash);
 
             // OrderId (max 20 karakter)
-            var ts      = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
-            var uid     = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
+            var ts = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");
+            var uid = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
             var orderId = $"FGS{ts}{uid}";
             if (orderId.Length > 20) orderId = orderId[..20];
 
@@ -182,19 +182,19 @@ public class ToslaPaymentService : IToslaPaymentService
                 {
                     _dbContext.PaymentHistories.Add(new PaymentHistory
                     {
-                        UserId            = userIdInt,
-                        OrderId           = orderId,
-                        TransactionId     = "",
-                        ProductCode       = package.ProductCode,
-                        PackageName       = package.Name,
-                        Amount            = finalPrice,
-                        Currency          = "TRY",
-                        CreditsAdded      = package.Credits,
-                        Status            = "PENDING",
-                        PaymentDate       = DateTime.UtcNow,
-                        DiscountCode      = string.IsNullOrWhiteSpace(request.DiscountCode) ? null : request.DiscountCode,
+                        UserId = userIdInt,
+                        OrderId = orderId,
+                        TransactionId = "",
+                        ProductCode = package.ProductCode,
+                        PackageName = package.Name,
+                        Amount = finalPrice,
+                        Currency = "TRY",
+                        CreditsAdded = package.Credits,
+                        Status = "PENDING",
+                        PaymentDate = DateTime.UtcNow,
+                        DiscountCode = string.IsNullOrWhiteSpace(request.DiscountCode) ? null : request.DiscountCode,
                         DiscountPercentage = discountPercentage > 0 ? (int?)discountPercentage : null,
-                        FinalAmount       = finalPrice,
+                        FinalAmount = finalPrice,
                     });
                     await _dbContext.SaveChangesAsync();
                     _logger.LogInformation("💾 PENDING kayıt oluşturuldu | OrderId={Oid} | ProductCode={Pc} | Credits={Cred}",
@@ -205,43 +205,43 @@ public class ToslaPaymentService : IToslaPaymentService
 
             var body = new
             {
-                clientId         = _clientId,
-                apiUser          = _apiUser,
-                rnd              = rnd,
-                timeSpan         = timeSpan,
-                hash             = hash,
-                orderId          = orderId,
-                callbackUrl      = _callbackUrl,
-                amount           = amountKurus,
-                currency         = 949,
+                clientId = _clientId,
+                apiUser = _apiUser,
+                rnd = rnd,
+                timeSpan = timeSpan,
+                hash = hash,
+                orderId = orderId,
+                callbackUrl = _callbackUrl,
+                amount = amountKurus,
+                currency = 949,
                 installmentCount = installment,
-                description      = $"FGSTrade - {package.NameTr}",
-                echo             = $"{request.UserId}|{package.ProductCode}",
-                extraParameters  = JsonSerializer.Serialize(new
+                description = $"FGSTrade - {package.NameTr}",
+                echo = $"{request.UserId}|{package.ProductCode}",
+                extraParameters = JsonSerializer.Serialize(new
                 {
-                    userId          = request.UserId,
-                    productCode     = package.ProductCode,
-                    credits         = package.Credits,
-                    isYearly        = package.IsYearly,
-                    isCredit        = package.IsCredit,
-                    durationDays    = package.DurationDays,
-                    discountCode    = request.DiscountCode,
+                    userId = request.UserId,
+                    productCode = package.ProductCode,
+                    credits = package.Credits,
+                    isYearly = package.IsYearly,
+                    isCredit = package.IsCredit,
+                    durationDays = package.DurationDays,
+                    discountCode = request.DiscountCode,
                     discountPercent = discountPercentage,
-                    originalPrice   = package.PriceTry,
+                    originalPrice = package.PriceTry,
                     discountedPrice = finalPrice
                 })
             };
 
-            var json    = JsonSerializer.Serialize(body);
+            var json = JsonSerializer.Serialize(body);
             _logger.LogInformation("REQUEST BODY: {Json}", json);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var url     = $"{_baseUrl}/threeDPayment";
+            var url = $"{_baseUrl}/threeDPayment";
 
             _logger.LogInformation("POST → {Url} | Paket={Pkg} | Taksit={Inst} | Tutar={Amount} kuruş",
                 url, package.Name, installment, amountKurus);
 
             var response = await _httpClient.PostAsync(url, content);
-            var raw      = await response.Content.ReadAsStringAsync();
+            var raw = await response.Content.ReadAsStringAsync();
 
             _logger.LogInformation("Tosla yanıt: HTTP {Status} | {Body}",
                 (int)response.StatusCode, raw.Length > 500 ? raw[..500] : raw);
@@ -250,13 +250,13 @@ public class ToslaPaymentService : IToslaPaymentService
                 return Fail("Ödeme sistemi ile iletişim kurulamadı", ((int)response.StatusCode).ToString());
 
             using var doc = JsonDocument.Parse(raw);
-            var root      = doc.RootElement;
-            var code      = GetInt(root, "Code", "code");
+            var root = doc.RootElement;
+            var code = GetInt(root, "Code", "code");
 
             if (code == 0)
             {
-                var sessionId     = GetStr(root, "ThreeDSessionId", "threeDSessionId");
-                var transactionId = GetStr(root, "TransactionId",   "transactionId");
+                var sessionId = GetStr(root, "ThreeDSessionId", "threeDSessionId");
+                var transactionId = GetStr(root, "TransactionId", "transactionId");
 
                 if (!string.IsNullOrEmpty(sessionId))
                 {
@@ -264,9 +264,9 @@ public class ToslaPaymentService : IToslaPaymentService
                     _logger.LogInformation("✅ Ödeme URL oluşturuldu | {Url}", paymentUrl);
                     return new ToslaPaymentResponseDto
                     {
-                        Success         = true,
-                        PaymentUrl      = paymentUrl,
-                        TransactionId   = transactionId ?? orderId,
+                        Success = true,
+                        PaymentUrl = paymentUrl,
+                        TransactionId = transactionId ?? orderId,
                         ThreeDSessionId = sessionId
                     };
                 }
@@ -467,14 +467,14 @@ public class ToslaPaymentService : IToslaPaymentService
             else
             {
                 // Üyelik paketi → üyelik uzat + kredi ekle
-                var now        = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+                var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
                 var oldPackage = user.PackageType;
-                var oldExpiry  = user.MembershipEnd;
+                var oldExpiry = user.MembershipEnd;
 
-                user.PackageType     = package.Name;
+                user.PackageType = package.Name;
                 user.MembershipStart = now;
-                user.MembershipEnd   = DateTime.SpecifyKind(now.AddDays(package.DurationDays), DateTimeKind.Utc);
-                user.Credits        += package.Credits;
+                user.MembershipEnd = DateTime.SpecifyKind(now.AddDays(package.DurationDays), DateTimeKind.Utc);
+                user.Credits += package.Credits;
                 user.MaxResultsPerSearch = Math.Max(user.MaxResultsPerSearch, 200);
 
                 _logger.LogInformation(
@@ -492,10 +492,10 @@ public class ToslaPaymentService : IToslaPaymentService
 
             if (pendingRecord != null)
             {
-                pendingRecord.Status        = "SUCCESS";
+                pendingRecord.Status = "SUCCESS";
                 pendingRecord.TransactionId = callback.TransactionId ?? "";
-                pendingRecord.Amount        = callback.Amount > 0 ? callback.Amount / 100m : pendingRecord.Amount;
-                pendingRecord.FinalAmount   = pendingRecord.Amount;
+                pendingRecord.Amount = callback.Amount > 0 ? callback.Amount / 100m : pendingRecord.Amount;
+                pendingRecord.FinalAmount = pendingRecord.Amount;
                 _dbContext.PaymentHistories.Update(pendingRecord);
                 _logger.LogInformation("✅ PENDING kayıt SUCCESS'e güncellendi | Id={Id} | OrderId={Oid}",
                     pendingRecord.Id, callback.OrderId);
@@ -505,17 +505,17 @@ public class ToslaPaymentService : IToslaPaymentService
                 // PENDING kayıt yoksa yeni SUCCESS kaydı oluştur
                 _dbContext.PaymentHistories.Add(new PaymentHistory
                 {
-                    UserId        = userId,
-                    OrderId       = callback.OrderId ?? "",
+                    UserId = userId,
+                    OrderId = callback.OrderId ?? "",
                     TransactionId = callback.TransactionId ?? "",
-                    ProductCode   = package.ProductCode,
-                    PackageName   = package.Name,
-                    Amount        = callback.Amount / 100m,
-                    Currency      = "TRY",
-                    CreditsAdded  = package.Credits,
-                    Status        = "SUCCESS",
-                    PaymentDate   = DateTime.UtcNow,
-                    FinalAmount   = callback.Amount / 100m,
+                    ProductCode = package.ProductCode,
+                    PackageName = package.Name,
+                    Amount = callback.Amount / 100m,
+                    Currency = "TRY",
+                    CreditsAdded = package.Credits,
+                    Status = "SUCCESS",
+                    PaymentDate = DateTime.UtcNow,
+                    FinalAmount = callback.Amount / 100m,
                 });
                 _logger.LogInformation("💾 Yeni SUCCESS PaymentHistory kaydı oluşturuldu | OrderId={Oid}", callback.OrderId);
             }
@@ -549,18 +549,18 @@ public class ToslaPaymentService : IToslaPaymentService
         {
             _logger.LogInformation("🔍 Tosla Inquiry | OrderId={Oid}", orderId);
 
-            var rnd      = Random.Shared.Next(100000, 999999).ToString();
+            var rnd = Random.Shared.Next(100000, 999999).ToString();
             var timeSpan = DateTime.UtcNow.AddHours(3).ToString("yyyyMMddHHmmss");
-            var hash     = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
+            var hash = ComputeHash(_apiPass + _clientId + _apiUser + rnd + timeSpan);
 
             var requestBody = new { clientId = _clientId, apiUser = _apiUser, rnd, timeSpan, hash, orderId };
-            var body    = JsonSerializer.Serialize(requestBody);
+            var body = JsonSerializer.Serialize(requestBody);
 
             _logger.LogInformation("📤 Tosla Inquiry Request | Body={Body}", body);
 
             var resp = await _httpClient.PostAsync($"{_baseUrl}/inquiry",
                 new StringContent(body, Encoding.UTF8, "application/json"));
-            var raw  = await resp.Content.ReadAsStringAsync();
+            var raw = await resp.Content.ReadAsStringAsync();
 
             _logger.LogInformation("📥 Tosla Inquiry Response | Status={Status} | Body={Body}", (int)resp.StatusCode, raw);
 
@@ -600,11 +600,11 @@ public class ToslaPaymentService : IToslaPaymentService
                     orderId, existingPayment.CreditsAdded);
                 return new PaymentVerificationResult
                 {
-                    Success            = true,
+                    Success = true,
                     IsAlreadyProcessed = true,
-                    CreditsAdded       = existingPayment.CreditsAdded,
-                    PackageName        = existingPayment.PackageName,
-                    UserId             = existingPayment.UserId,
+                    CreditsAdded = existingPayment.CreditsAdded,
+                    PackageName = existingPayment.PackageName,
+                    UserId = existingPayment.UserId,
 
                 };
             }
@@ -615,7 +615,7 @@ public class ToslaPaymentService : IToslaPaymentService
             {
                 return new PaymentVerificationResult
                 {
-                    Success      = false,
+                    Success = false,
                     ErrorMessage = inquiry?.Message ?? "Ödeme sorgulanamadı"
                 };
             }
@@ -625,7 +625,7 @@ public class ToslaPaymentService : IToslaPaymentService
             {
                 return new PaymentVerificationResult
                 {
-                    Success      = false,
+                    Success = false,
                     ErrorMessage = "İşlem detayları bulunamadı"
                 };
             }
@@ -635,7 +635,7 @@ public class ToslaPaymentService : IToslaPaymentService
                 await SaveFailedPaymentFromInquiry(orderId, transaction);
                 return new PaymentVerificationResult
                 {
-                    Success      = false,
+                    Success = false,
                     ErrorMessage = $"Ödeme başarısız: {transaction.BankResponseMessage}"
                 };
             }
@@ -643,15 +643,15 @@ public class ToslaPaymentService : IToslaPaymentService
             // Başarılı → aktivasyon
             var callbackDto = new ToslaCallbackDto
             {
-                Code                = 0,
-                Message             = "Başarılı (Verified)",
-                OrderId             = orderId,
-                BankResponseCode    = transaction.BankResponseCode,
+                Code = 0,
+                Message = "Başarılı (Verified)",
+                OrderId = orderId,
+                BankResponseCode = transaction.BankResponseCode,
                 BankResponseMessage = transaction.BankResponseMessage,
-                TransactionId       = transaction.TransactionId.ToString(),
-                AuthCode            = transaction.AuthCode,
-                Amount              = transaction.Amount,
-                RequestStatus       = 1
+                TransactionId = transaction.TransactionId.ToString(),
+                AuthCode = transaction.AuthCode,
+                Amount = transaction.Amount,
+                RequestStatus = 1
             };
 
             await ActivateMembershipAsync(callbackDto);
@@ -664,18 +664,18 @@ public class ToslaPaymentService : IToslaPaymentService
             {
                 return new PaymentVerificationResult
                 {
-                    Success      = false,
+                    Success = false,
                     ErrorMessage = "Ödeme işlendi ama kayıt bulunamadı"
                 };
             }
 
             return new PaymentVerificationResult
             {
-                Success            = true,
+                Success = true,
                 IsAlreadyProcessed = false,
-                CreditsAdded       = payment.CreditsAdded,
-                PackageName        = payment.PackageName ?? "Bilinmeyen",
-                UserId             = payment.UserId,
+                CreditsAdded = payment.CreditsAdded,
+                PackageName = payment.PackageName ?? "Bilinmeyen",
+                UserId = payment.UserId,
 
             };
         }
@@ -684,7 +684,7 @@ public class ToslaPaymentService : IToslaPaymentService
             _logger.LogError(ex, "❌ Ödeme doğrulama hatası | OrderId={Oid}", orderId);
             return new PaymentVerificationResult
             {
-                Success      = false,
+                Success = false,
                 ErrorMessage = "Sistem hatası: " + ex.Message
             };
         }
@@ -706,7 +706,7 @@ public class ToslaPaymentService : IToslaPaymentService
 
             if (pending != null)
             {
-                pending.Status       = "FAILED";
+                pending.Status = "FAILED";
                 pending.ErrorMessage = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}";
                 _dbContext.PaymentHistories.Update(pending);
             }
@@ -723,14 +723,14 @@ public class ToslaPaymentService : IToslaPaymentService
 
                 _dbContext.PaymentHistories.Add(new PaymentHistory
                 {
-                    UserId        = userId,
-                    OrderId       = callback.OrderId ?? "",
+                    UserId = userId,
+                    OrderId = callback.OrderId ?? "",
                     TransactionId = callback.TransactionId ?? "",
-                    Amount        = callback.Amount / 100m,
-                    Currency      = "TRY",
-                    Status        = "FAILED",
-                    PaymentDate   = DateTime.UtcNow,
-                    ErrorMessage  = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}"
+                    Amount = callback.Amount / 100m,
+                    Currency = "TRY",
+                    Status = "FAILED",
+                    PaymentDate = DateTime.UtcNow,
+                    ErrorMessage = $"Code:{callback.Code} Bank:{callback.BankResponseCode} {callback.BankResponseMessage}"
                 });
             }
 
@@ -751,7 +751,7 @@ public class ToslaPaymentService : IToslaPaymentService
 
             if (pending != null)
             {
-                pending.Status       = "FAILED";
+                pending.Status = "FAILED";
                 pending.ErrorMessage = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}";
                 _dbContext.PaymentHistories.Update(pending);
             }
@@ -764,14 +764,14 @@ public class ToslaPaymentService : IToslaPaymentService
                 int.TryParse(userIdStr, out int userId);
                 _dbContext.PaymentHistories.Add(new PaymentHistory
                 {
-                    UserId        = userId,
-                    OrderId       = orderId,
+                    UserId = userId,
+                    OrderId = orderId,
                     TransactionId = transaction.TransactionId.ToString(),
-                    Amount        = transaction.Amount / 100m,
-                    Currency      = "TRY",
-                    Status        = "FAILED",
-                    PaymentDate   = DateTime.UtcNow,
-                    ErrorMessage  = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}"
+                    Amount = transaction.Amount / 100m,
+                    Currency = "TRY",
+                    Status = "FAILED",
+                    PaymentDate = DateTime.UtcNow,
+                    ErrorMessage = $"BankCode:{transaction.BankResponseCode} {transaction.BankResponseMessage}"
                 });
             }
 
@@ -791,7 +791,7 @@ public class ToslaPaymentService : IToslaPaymentService
                 .FirstOrDefaultAsync(p => p.OrderId == orderId && p.Status == "PENDING");
             if (pending != null)
             {
-                pending.Status       = "FAILED";
+                pending.Status = "FAILED";
                 pending.ErrorMessage = reason;
                 _dbContext.PaymentHistories.Update(pending);
                 await _dbContext.SaveChangesAsync();
