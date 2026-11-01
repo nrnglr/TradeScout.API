@@ -56,6 +56,8 @@ public class ParatikaPaymentRequestDto
     public string  UserId       { get; set; } = string.Empty;
     public int     Installment  { get; set; } = 1;
     public string? DiscountCode { get; set; }
+    /// <summary>Eğitim ödemelerinde TRG- kayıt kodu (max 20 karakter). Boşsa servis kendi ID'sini üretir.</summary>
+    public string? MerchantPaymentId { get; set; }
 }
 
 public class ParatikaPaymentResponseDto
@@ -167,28 +169,32 @@ public class ParatikaPaymentService : IParatikaPaymentService
     private readonly string _hostedPageBaseUrl;
     private readonly string _callbackUrl;
     private readonly string _recurringNotifUrl;
-
+    
+    
     // ─── Paket listesi ────────────────────────────────────────────────────────
     // IsCredit=true  → extra kredi, tek seferlik ödeme, recurring KURULMAZ
     // IsCredit=false → abonelik paketi, recurring KURULUR
    // ─── Paket listesi ────────────────────────────────────────────────────────
     private readonly List<FgsTradePackage> _packages = new()
     {
-        // Aylık abonelikler
-        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",         NameTr="Başlangıç",         PriceUsd=10m,   PriceTry=450m,   Credits=5,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",             NameTr="Profesyonel",       PriceUsd=26m,   PriceTry=1170m,  Credits=20,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
-        new() { ProductCode="1274779", Alias="business_monthly", Name="Business",        NameTr="İş",                PriceUsd=53m,   PriceTry=2385m,  Credits=50,  DurationDays=30,  MaxInstallment=1,  IsYearly=false, IsCredit=false },
+              // Aylık abonelikler
+        new() { ProductCode="1274715", Alias="starter_monthly",  Name="Starter",  NameTr="Başlangıç",   PriceUsd=10m, PriceTry=472m,  Credits=5,  DurationDays=30, MaxInstallment=1, IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274739", Alias="pro_monthly",      Name="Pro",      NameTr="Profesyonel", PriceUsd=26m, PriceTry=1227m, Credits=20, DurationDays=30, MaxInstallment=1, IsYearly=false, IsCredit=false },
+        new() { ProductCode="1274779", Alias="business_monthly", Name="Business", NameTr="İş",          PriceUsd=53m, PriceTry=2502m, Credits=50, DurationDays=30, MaxInstallment=1, IsYearly=false, IsCredit=false },
 
         // Yıllık abonelikler
-        new() { ProductCode="1274716", Alias="starter_yearly",   Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",  PriceUsd=69m,   PriceTry=3105m,  Credits=60, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274740", Alias="pro_yearly",       Name="Pro Yıllık",      NameTr="Profesyonel Yıllık",PriceUsd=199m,  PriceTry=8955m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
-        new() { ProductCode="1274780", Alias="business_yearly",  Name="Business Yıllık", NameTr="İş Yıllık",         PriceUsd=399m,  PriceTry=17955m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true,  IsCredit=false },
+        new() { ProductCode="1274716", Alias="starter_yearly",  Name="Starter Yıllık",  NameTr="Başlangıç Yıllık",   PriceUsd=69m,  PriceTry=3257m,  Credits=60,  DurationDays=365, MaxInstallment=12, IsYearly=true, IsCredit=false },
+        new() { ProductCode="1274740", Alias="pro_yearly",      Name="Pro Yıllık",      NameTr="Profesyonel Yıllık", PriceUsd=199m, PriceTry=9393m,  Credits=240, DurationDays=365, MaxInstallment=12, IsYearly=true, IsCredit=false },
+        new() { ProductCode="1274780", Alias="business_yearly", Name="Business Yıllık", NameTr="İş Yıllık",          PriceUsd=399m, PriceTry=18833m, Credits=600, DurationDays=365, MaxInstallment=12, IsYearly=true, IsCredit=false },
 
         // Extra kredi
-        new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=450m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
-        new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=900m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
-        new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1575m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
-        new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2700m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
+        new() { ProductCode="1274710", Alias="credit_10",  Name="10 Kredi",  NameTr="10 Ekstra Kredi",  PriceUsd=10m, PriceTry=472m,  Credits=10,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
+        new() { ProductCode="1274725", Alias="credit_25",  Name="25 Kredi",  NameTr="25 Ekstra Kredi",  PriceUsd=20m, PriceTry=944m,  Credits=25,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
+        new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1652m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
+        new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2832m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
+
+        new() { ProductCode="FORTEX_CERT_01", Alias="fortex_cert", Name="Sertifikalı Eğitim", NameTr="Dış Ticaret Sertifika Programı", PriceUsd=200m, PriceTry=9440m, Credits=0, DurationDays=30, MaxInstallment=6, IsYearly=true, IsCredit=true },
+
     };
 
     // ─── Constructor ──────────────────────────────────────────────────────────
@@ -208,7 +214,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
         _merchantSecretKey = Env("PARATIKA_SECRET_KEY",         configuration["ParatikaSettings:SecretKey"]         ?? "");
         _apiBaseUrl        = Env("PARATIKA_API_BASE_URL",       configuration["ParatikaSettings:ApiBaseUrl"]        ?? "https://vpos.paratika.com.tr/paratika/api/v2").TrimEnd('/');
         _hostedPageBaseUrl = Env("PARATIKA_HOSTED_PAGE_URL",    configuration["ParatikaSettings:HostedPageBaseUrl"] ?? "https://vpos.paratika.com.tr/merchant/post/sale").TrimEnd('/');
-        _callbackUrl       = Env("PARATIKA_CALLBACK_URL",       configuration["ParatikaSettings:CallbackUrl"]       ?? "https://api.fgstrade.com/api/payment/paratika/callback");
+        _callbackUrl       = Env("PARATIKA_CALLBACK_URL",       configuration["ParatikaSettings:CallbackUrl"]       ?? "https://api.fgstrade.com/api/payment/callback");
         _recurringNotifUrl = Env("PARATIKA_RECURRING_NOTIF_URL",configuration["ParatikaSettings:RecurringNotifUrl"] ?? "https://api.fgstrade.com/api/payment/paratika/recurring-notification");
 
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
@@ -234,7 +240,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
 
             // Taksit: sadece yıllık aboneliklerde uygulanır
             int installment = 1;
-            if (package.IsYearly && !package.IsCredit)
+            if (package.MaxInstallment > 1)
                 installment = Math.Clamp(request.Installment, 1, package.MaxInstallment);
 
             // İndirim
@@ -263,7 +269,9 @@ public class ParatikaPaymentService : IParatikaPaymentService
             // MerchantPaymentId — max 20 karakter (Raiffeisen uyumluluğu için kısa tutuyoruz)
             var ts            = DateTime.UtcNow.AddHours(3).ToString("yyMMddHHmm");  // 10 karakter
             var uid           = (request.UserId.Length > 7 ? request.UserId[..7] : request.UserId).PadLeft(7, '0');
-            var merchantPayId = $"FGS{ts}{uid}";  // 20 karakter
+            // Eğitim ödemesi: controller'ın verdiği TRG- kodunu kullan (callback'te eşleşsin)
+            var isTraining    = !string.IsNullOrEmpty(request.MerchantPaymentId);
+            var merchantPayId = isTraining ? request.MerchantPaymentId! : $"FGS{ts}{uid}";  // max 20 karakter
             if (merchantPayId.Length > 20) merchantPayId = merchantPayId[..20];
 
             // CustomData — callback'te paket bilgisini geri almak için
@@ -344,7 +352,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
             // Pending kayıt — callback'te paketi bulmak için DB'ye yaz
             var existingPending = await _dbContext.PaymentHistories
                 .FirstOrDefaultAsync(p => p.OrderId == merchantPayId);
-            if (existingPending == null)
+            if (!isTraining && existingPending == null)   // eğitimde PaymentHistories'e yazma (UserId FK)
             {
                 _dbContext.PaymentHistories.Add(new PaymentHistory
                 {
@@ -404,6 +412,20 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 };
             }
             _logger.LogWarning("⚠️ Hash eksik geldi, işlem devam ediyor | PayId={Id}", callback.MerchantPaymentId);
+        }
+
+        // 1b. EĞİTİM ÖDEMESİ: kredi/abonelik işlemi yok, durumu controller günceller
+        if (callback.MerchantPaymentId?.StartsWith("TRG-") == true)
+        {
+            var trainingOk = callback.ResponseCode == "00";
+            _logger.LogInformation("🎓 Eğitim callback | PayId={Id} | Code={Code}", callback.MerchantPaymentId, callback.ResponseCode);
+            return new ParatikaCallbackResult
+            {
+                Success           = trainingOk,
+                MerchantPaymentId = callback.MerchantPaymentId,
+                ErrorMessage      = trainingOk ? null : callback.ErrorMsg,
+                BankErrorCode     = trainingOk ? null : (callback.PgTranErrorCode ?? callback.ResponseCode)
+            };
         }
 
         // 2. BANKA YANITI KONTROLÜ

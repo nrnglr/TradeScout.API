@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using TradeScout.API.Models;
-
+using TradeScout.API.Models;
 namespace TradeScout.API.Data;
+
+
 
 /// <summary>
 /// Application database context for TradeScout
@@ -21,6 +23,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<PaymentHistory> PaymentHistories { get; set; }
     public DbSet<DiscountCode> DiscountCodes { get; set; }  // ✅ İndirim kodları tablosu
     public DbSet<Subscription> Subscriptions { get; set; } // ✅ Paratika abonelik takibi
+    public DbSet<TrainingRegistration> TrainingRegistrations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
