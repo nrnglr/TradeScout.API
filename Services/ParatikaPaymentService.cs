@@ -193,7 +193,7 @@ public class ParatikaPaymentService : IParatikaPaymentService
         new() { ProductCode="1274750", Alias="credit_50",  Name="50 Kredi",  NameTr="50 Ekstra Kredi",  PriceUsd=35m, PriceTry=1652m, Credits=50,  DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
         new() { ProductCode="1247100", Alias="credit_100", Name="100 Kredi", NameTr="100 Ekstra Kredi", PriceUsd=60m, PriceTry=2832m, Credits=100, DurationDays=0, MaxInstallment=1, IsYearly=false, IsCredit=true },
 
-        new() { ProductCode="FORTEX_CERT_01", Alias="fortex_cert", Name="Sertifikalı Eğitim", NameTr="Dış Ticaret Sertifika Programı", PriceUsd=200m, PriceTry=6000m, Credits=0, DurationDays=30, MaxInstallment=6, IsYearly=true, IsCredit=true },
+        new() { ProductCode="FORTEX_CERT_01", Alias="fortex_cert", Name="Sertifikalı Eğitim", NameTr="Dış Ticaret Sertifika Programı", PriceUsd=200m, PriceTry=6600m, Credits=0, DurationDays=30, MaxInstallment=6, IsYearly=true, IsCredit=true },
 
     };
 
