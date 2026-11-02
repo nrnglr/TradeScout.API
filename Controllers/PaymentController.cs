@@ -19,15 +19,18 @@ public class PaymentController : ControllerBase
     private readonly IParatikaPaymentService _paratikaPaymentService;
     private readonly ApplicationDbContext _context;
     private readonly ILogger<PaymentController> _logger;
+    private readonly IEmailService _email;
 
     public PaymentController(
         IParatikaPaymentService paratikaPaymentService,
         ApplicationDbContext context,
-        ILogger<PaymentController> logger)
+        ILogger<PaymentController> logger,
+        IEmailService email)
     {
         _paratikaPaymentService = paratikaPaymentService;
         _context = context;
         _logger = logger;
+        _email = email;
     }
 
     /// <summary>
@@ -185,11 +188,17 @@ public class PaymentController : ControllerBase
         if (callback.MerchantPaymentId?.StartsWith("TRG-") == true)
         {
             var trainingReg = _context.TrainingRegistrations.FirstOrDefault(r => r.RegistrationCode == callback.MerchantPaymentId);
-            if (trainingReg != null)
+
+            // Aynı callback ikinci kez gelirse (yenileme vb.) tekrar işlem/mail yapma
+            if (trainingReg != null && trainingReg.PaymentStatus != "Completed")
             {
                 trainingReg.PaymentStatus = result.Success ? "Completed" : "Failed";
                 trainingReg.PaidAt = result.Success ? DateTime.UtcNow : null;
                 await _context.SaveChangesAsync();
+
+                // Mail SADECE ödeme başarılıysa gider
+                if (result.Success)
+                    await SendTrainingEmailsAsync(trainingReg);
             }
         }
 
@@ -227,6 +236,60 @@ public class PaymentController : ControllerBase
         {
             _logger.LogError(ex, "Ödeme doğrulama hatası");
             return StatusCode(500, new { success = false, message = "Doğrulama hatası" });
+        }
+    }
+
+    /// <summary>
+    /// Ödeme alındıktan sonra: (1) info@fgstrade.com'a kayıt bildirimi, (2) müşteriye onay maili.
+    /// Mail hatası ödeme akışını bozmaz, sadece loglanır.
+    /// </summary>
+    private async Task SendTrainingEmailsAsync(TrainingRegistration reg)
+    {
+        // Kullanıcı girdisini HTML'e koymadan önce encode et
+        static string e(string? text) => System.Net.WebUtility.HtmlEncode(text ?? "");
+
+        try
+        {
+            var adminBody = $@"
+                <h3>Yeni Eğitim Kaydı (Ödeme Alındı)</h3>
+                <p><b>Kayıt Kodu:</b> {e(reg.RegistrationCode)}<br>
+                <b>Ad Soyad:</b> {e(reg.FirstName)} {e(reg.LastName)}<br>
+                <b>E-posta:</b> {e(reg.Email)}<br>
+                <b>Telefon:</b> {e(reg.Phone)}<br>
+                <b>Şehir:</b> {e(reg.City)}<br>
+                <b>Meslek/Firma:</b> {e(reg.Occupation ?? "-")}<br>
+                <b>Dönem:</b> {e(reg.SelectedSlot)}<br>
+                <b>Tutar:</b> {reg.Amount:N2} TL<br>
+                <b>Ödeme Tarihi (UTC):</b> {reg.PaidAt:dd.MM.yyyy HH:mm}</p>";
+
+            var adminSent = await _email.SendEmailAsync(
+                "info@fgstrade.com",
+                $"[FGS Trade] Yeni eğitim kaydı: {reg.FirstName} {reg.LastName}",
+                adminBody);
+
+            if (!adminSent)
+                _logger.LogWarning("Eğitim admin maili gönderilemedi | {Code}", reg.RegistrationCode);
+
+            var userBody = $@"
+                <h3>Ödemeniz alındı, kaydınız tamamlandı ✅</h3>
+                <p>Merhaba {e(reg.FirstName)},</p>
+                <p>Dış Ticaret &amp; E-Ticaret Sertifika Programı için ödemeniz başarıyla alındı.</p>
+                <p><b>Kayıt kodunuz:</b> {e(reg.RegistrationCode)}<br>
+                <b>Seçtiğiniz dönem:</b> {e(reg.SelectedSlot)}</p>
+                <p>Sorularınız için bu e-postayı yanıtlayabilirsiniz.</p>
+                <p><b>FGS TRADE Ekibi</b></p>";
+
+            var userSent = await _email.SendEmailAsync(
+                reg.Email,
+                "Eğitim kaydınız tamamlandı - FGS Trade",
+                userBody);
+
+            if (!userSent)
+                _logger.LogWarning("Eğitim müşteri maili gönderilemedi | {Code}", reg.RegistrationCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Eğitim mailleri gönderilirken hata | {Code}", reg.RegistrationCode);
         }
     }
 }
