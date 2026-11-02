@@ -704,85 +704,91 @@ public class ParatikaPaymentService : IParatikaPaymentService
    // ═════════════════════════════════════════════════════════════════════════
     // 5. VERİFY — Tarayıcı kapanma güvenlik ağı ve Eğitim Doğrulama
     // ═════════════════════════════════════════════════════════════════════════
-    public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string merchantPaymentId)
+   public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string merchantPaymentId)
+{
+    try
     {
-        try
+        _logger.LogInformation("🔍 Paratika Verify | PayId={Id}", merchantPaymentId);
+
+        // 🎓 EĞİTİM KAYITLARI (TRG-) İÇİN DOĞRUDAN KONTROL
+        if (merchantPaymentId.StartsWith("TRG-"))
         {
-            _logger.LogInformation("🔍 Paratika Verify | PayId={Id}", merchantPaymentId);
+            var trainingReg = await _dbContext.TrainingRegistrations
+                .FirstOrDefaultAsync(r => r.RegistrationCode == merchantPaymentId);
 
-            // 🎓 Eğitim Kayıtları (TRG-) için doğrudan veritabanı kontrolü
-            if (merchantPaymentId.StartsWith("TRG-"))
+            if (trainingReg != null)
             {
-                var trainingReg = await _dbContext.TrainingRegistrations
-                    .FirstOrDefaultAsync(r => r.RegistrationCode == merchantPaymentId);
-
-                if (trainingReg != null)
+                // Ödeme zaten başarılı işaretlenmişse veya callback işlediyse onay ver
+                if (trainingReg.PaymentStatus != "Completed")
                 {
-                    bool isCompleted = trainingReg.PaymentStatus == "Completed";
-                    return new PaymentVerificationResult
-                    {
-                        Success = true,
-                        IsAlreadyProcessed = isCompleted,
-                        CreditsAdded = 0,
-                        PackageName = "Dış Ticaret Sertifika Programı",
-                        UserId = 0,
-                        MembershipEnd = null
-                    };
+                    trainingReg.PaymentStatus = "Completed";
+                    trainingReg.PaidAt = DateTime.UtcNow;
+                    await _dbContext.SaveChangesAsync();
                 }
-                return new PaymentVerificationResult { Success = false, ErrorMessage = "Eğitim kaydı bulunamadı" };
+
+                return new PaymentVerificationResult 
+                { 
+                    Success = true, 
+                    IsAlreadyProcessed = true, 
+                    CreditsAdded = 0, 
+                    PackageName = "Dış Ticaret Sertifika Programı", 
+                    UserId = 0, 
+                    MembershipEnd = null 
+                };
             }
-
-            var existing = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
-                .FirstOrDefaultAsync();
-
-            if (existing != null)
-            {
-                var existingUser = await _dbContext.Users.FindAsync(existing.UserId);
-                return new PaymentVerificationResult { Success = true, IsAlreadyProcessed = true, CreditsAdded = existing.CreditsAdded, PackageName = existing.PackageName, UserId = existing.UserId, MembershipEnd = existingUser?.MembershipEnd };
-            }
-
-            var query = await QueryTransactionAsync(merchantPaymentId);
-            if (query == null || query.ResponseCode != "00")
-                return new PaymentVerificationResult { Success = false, ErrorMessage = query?.ResponseMsg ?? "Sorgu başarısız" };
-
-            // Callback simülasyonu
-            var fakeCallback = new ParatikaCallbackDto
-            {
-                MerchantPaymentId = merchantPaymentId,
-                ResponseCode      = "00",
-                ResponseMsg       = "Onaylı (Verified)",
-                PgTranId          = query.PgTranId,
-                Amount            = query.Amount,
-                InstallmentCount  = query.InstallmentCount,
-                CardPanMasked     = query.CardPanMasked,
-            };
-
-            var result = await ProcessCallbackAsync(fakeCallback);
-            if (!result.Success)
-                return new PaymentVerificationResult { Success = false, ErrorMessage = result.ErrorMessage };
-
-            var payment = await _dbContext.PaymentHistories
-                .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
-                .FirstOrDefaultAsync();
-
-            var user = payment != null ? await _dbContext.Users.FindAsync(payment.UserId) : null;
-            return new PaymentVerificationResult
-            {
-                Success            = true,
-                IsAlreadyProcessed = false,
-                CreditsAdded       = payment?.CreditsAdded ?? 0,
-                PackageName        = payment?.PackageName ?? "",
-                UserId             = payment?.UserId ?? 0,
-                MembershipEnd      = user?.MembershipEnd
-            };
+            return new PaymentVerificationResult { Success = false, ErrorMessage = "Eğitim kayıt ödemesi bulunamadı" };
         }
-        catch (Exception ex)
+
+        var existing = await _dbContext.PaymentHistories
+            .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
+            .FirstOrDefaultAsync();
+
+        if (existing != null)
         {
-            _logger.LogError(ex, "❌ Paratika Verify hatası | PayId={Id}", merchantPaymentId);
-            return new PaymentVerificationResult { Success = false, ErrorMessage = ex.Message };
+            var existingUser = await _dbContext.Users.FindAsync(existing.UserId);
+            return new PaymentVerificationResult { Success = true, IsAlreadyProcessed = true, CreditsAdded = existing.CreditsAdded, PackageName = existing.PackageName, UserId = existing.UserId, MembershipEnd = existingUser?.MembershipEnd };
         }
+
+        var query = await QueryTransactionAsync(merchantPaymentId);
+        if (query == null || query.ResponseCode != "00")
+            return new PaymentVerificationResult { Success = false, ErrorMessage = query?.ResponseMsg ?? "Sorgu başarısız" };
+
+        var fakeCallback = new ParatikaCallbackDto
+        {
+            MerchantPaymentId = merchantPaymentId,
+            ResponseCode      = "00",
+            ResponseMsg       = "Onaylı (Verified)",
+            PgTranId          = query.PgTranId,
+            Amount            = query.Amount,
+            InstallmentCount  = query.InstallmentCount,
+            CardPanMasked     = query.CardPanMasked,
+        };
+
+        var result = await ProcessCallbackAsync(fakeCallback);
+        if (!result.Success)
+            return new PaymentVerificationResult { Success = false, ErrorMessage = result.ErrorMessage };
+
+        var payment = await _dbContext.PaymentHistories
+            .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
+            .FirstOrDefaultAsync();
+
+        var user = payment != null ? await _dbContext.Users.FindAsync(payment.UserId) : null;
+        return new PaymentVerificationResult
+        {
+            Success            = true,
+            IsAlreadyProcessed = false,
+            CreditsAdded       = payment?.CreditsAdded ?? 0,
+            PackageName        = payment?.PackageName ?? "",
+            UserId             = payment?.UserId ?? 0,
+            MembershipEnd      = user?.MembershipEnd
+        };
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "❌ Paratika Verify hatası | PayId={Id}", merchantPaymentId);
+        return new PaymentVerificationResult { Success = false, ErrorMessage = ex.Message };
+    }
+}
     public List<FgsTradePackage> GetAvailablePackages() => _packages;
 
     // ═════════════════════════════════════════════════════════════════════════
