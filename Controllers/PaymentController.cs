@@ -6,7 +6,7 @@ using TradeScout.API.Services;
 using TradeScout.API.DTOs;
 using TradeScout.API.Models; 
 using TradeScout.API.Data;   
-
+using Microsoft.EntityFrameworkCore;
 namespace TradeScout.API.Controllers;
 
 /// <summary>
@@ -210,8 +210,8 @@ public class PaymentController : ControllerBase
         return Redirect($"{frontendUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={result.BankErrorCode}&gateway=paratika");
     }
 
-    /// <summary>
-    /// Ödeme doğrulama (Güvenlik ağı)
+   /// <summary>
+    /// Ödeme doğrulama (Güvenlik ağı ve Eğitim doğrulaması)
     /// </summary>
     [HttpGet("verify/{orderId}")]
     [HttpPost("verify/{orderId}")]
@@ -220,7 +220,35 @@ public class PaymentController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("🔍 Paratika ödeme doğrulama isteği | OrderId: {OrderId}", orderId);
+            _logger.LogInformation("🔍 Ödeme doğrulama isteği | OrderId: {OrderId}", orderId);
+
+            // 🎓 Eğer gelen istek bir eğitim kaydiyse (TRG-), TrainingRegistrations tablosundan kontrol et
+            if (!string.IsNullOrEmpty(orderId) && orderId.StartsWith("TRG-"))
+            {
+                var trainingReg = await _context.TrainingRegistrations
+                    .FirstOrDefaultAsync(r => r.RegistrationCode == orderId);
+
+                if (trainingReg != null)
+                {
+                    // Ödeme callback'te zaten tamamlandı işaretlendiyse veya şimdi onaylıyoruz
+                    if (trainingReg.PaymentStatus != "Completed")
+                    {
+                        trainingReg.PaymentStatus = "Completed";
+                        trainingReg.PaidAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        
+                        // Mailleri tetikle
+                        await SendTrainingEmailsAsync(trainingReg);
+                    }
+
+                    return Ok(new { success = true, message = "Eğitim ödemesi doğrulandı", orderId });
+                }
+
+                _logger.LogWarning("⚠️ Doğrulama sırasında eğitim kaydı bulunamadı | OrderId: {OrderId}", orderId);
+                return BadRequest(new { success = false, message = "Ödeme kaydı bulunamadı" });
+            }
+
+            // Standart paketler için Paratika servis doğrulaması
             var result = await _paratikaPaymentService.VerifyAndProcessPaymentAsync(orderId);
 
             if (result.Success)
@@ -232,7 +260,7 @@ public class PaymentController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ödeme doğrulama hatası");
+            _logger.LogError(ex, "Ödeme doğrulama hatası | OrderId: {OrderId}", orderId);
             return StatusCode(500, new { success = false, message = "Doğrulama hatası" });
         }
     }
