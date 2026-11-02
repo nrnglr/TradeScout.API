@@ -111,21 +111,21 @@ public class PaymentController : ControllerBase
                 SelectedSlot = request.SelectedSlot,
                 PaymentMethod = "card",
                 PaymentStatus = "Pending",
-                Amount = 9440,
+                Amount = 6600, // Gerçek fiyat veya test tutarı
                 RegistrationCode = $"TRG-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}"
             };
 
             _context.TrainingRegistrations.Add(registration);
             await _context.SaveChangesAsync();
 
-            // 2. Paratika İstek Modeli Oluşturma (Doğru ProductCode ve Taksit bilgisi)
+            // 2. Paratika İstek Modeli Oluşturma
             var paratikaRequest = new ParatikaPaymentRequestDto
             {
                 ProductCode = "FORTEX_CERT_01", 
                 UserId = request.Email,
-                Installment = 6, // Şartname gereği 6 taksit
+                Installment = 6, 
                 DiscountCode = null,
-                MerchantPaymentId = registration.RegistrationCode   // TRG-... → callback'te kayıt eşleşsin
+                MerchantPaymentId = registration.RegistrationCode
             };
 
             var result = await _paratikaPaymentService.InitializePaymentAsync(paratikaRequest);
@@ -184,19 +184,17 @@ public class PaymentController : ControllerBase
         var result = await _paratikaPaymentService.ProcessCallbackAsync(callback);
         var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
 
-        // Eğer gelen ödeme bir eğitim kaydiyse veritabanındaki statüyü güncelle
+        // Eğer gelen ödeme bir eğitim kaydiyse veritabanındaki statüyü güncelle ve mailleri at
         if (callback.MerchantPaymentId?.StartsWith("TRG-") == true)
         {
             var trainingReg = _context.TrainingRegistrations.FirstOrDefault(r => r.RegistrationCode == callback.MerchantPaymentId);
 
-            // Aynı callback ikinci kez gelirse (yenileme vb.) tekrar işlem/mail yapma
             if (trainingReg != null && trainingReg.PaymentStatus != "Completed")
             {
                 trainingReg.PaymentStatus = result.Success ? "Completed" : "Failed";
                 trainingReg.PaidAt = result.Success ? DateTime.UtcNow : null;
                 await _context.SaveChangesAsync();
 
-                // Mail SADECE ödeme başarılıysa gider
                 if (result.Success)
                     await SendTrainingEmailsAsync(trainingReg);
             }
@@ -241,11 +239,9 @@ public class PaymentController : ControllerBase
 
     /// <summary>
     /// Ödeme alındıktan sonra: (1) info@fgstrade.com'a kayıt bildirimi, (2) müşteriye onay maili.
-    /// Mail hatası ödeme akışını bozmaz, sadece loglanır.
     /// </summary>
     private async Task SendTrainingEmailsAsync(TrainingRegistration reg)
     {
-        // Kullanıcı girdisini HTML'e koymadan önce encode et
         static string e(string? text) => System.Net.WebUtility.HtmlEncode(text ?? "");
 
         try
@@ -262,13 +258,10 @@ public class PaymentController : ControllerBase
                 <b>Tutar:</b> {reg.Amount:N2} TL<br>
                 <b>Ödeme Tarihi (UTC):</b> {reg.PaidAt:dd.MM.yyyy HH:mm}</p>";
 
-            var adminSent = await _email.SendEmailAsync(
+            await _email.SendEmailAsync(
                 "info@fgstrade.com",
                 $"[FGS Trade] Yeni eğitim kaydı: {reg.FirstName} {reg.LastName}",
                 adminBody);
-
-            if (!adminSent)
-                _logger.LogWarning("Eğitim admin maili gönderilemedi | {Code}", reg.RegistrationCode);
 
             var userBody = $@"
                 <h3>Ödemeniz alındı, kaydınız tamamlandı ✅</h3>
@@ -279,13 +272,10 @@ public class PaymentController : ControllerBase
                 <p>Sorularınız için bu e-postayı yanıtlayabilirsiniz.</p>
                 <p><b>FGS TRADE Ekibi</b></p>";
 
-            var userSent = await _email.SendEmailAsync(
+            await _email.SendEmailAsync(
                 reg.Email,
                 "Eğitim kaydınız tamamlandı - FGS Trade",
                 userBody);
-
-            if (!userSent)
-                _logger.LogWarning("Eğitim müşteri maili gönderilemedi | {Code}", reg.RegistrationCode);
         }
         catch (Exception ex)
         {

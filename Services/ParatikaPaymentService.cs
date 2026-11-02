@@ -701,11 +701,36 @@ public class ParatikaPaymentService : IParatikaPaymentService
     // ═════════════════════════════════════════════════════════════════════════
     // 5. VERİFY — Tarayıcı kapanma güvenlik ağı
     // ═════════════════════════════════════════════════════════════════════════
+   // ═════════════════════════════════════════════════════════════════════════
+    // 5. VERİFY — Tarayıcı kapanma güvenlik ağı ve Eğitim Doğrulama
+    // ═════════════════════════════════════════════════════════════════════════
     public async Task<PaymentVerificationResult> VerifyAndProcessPaymentAsync(string merchantPaymentId)
     {
         try
         {
             _logger.LogInformation("🔍 Paratika Verify | PayId={Id}", merchantPaymentId);
+
+            // 🎓 Eğitim Kayıtları (TRG-) için doğrudan veritabanı kontrolü
+            if (merchantPaymentId.StartsWith("TRG-"))
+            {
+                var trainingReg = await _dbContext.TrainingRegistrations
+                    .FirstOrDefaultAsync(r => r.RegistrationCode == merchantPaymentId);
+
+                if (trainingReg != null)
+                {
+                    bool isCompleted = trainingReg.PaymentStatus == "Completed";
+                    return new PaymentVerificationResult
+                    {
+                        Success = true,
+                        IsAlreadyProcessed = isCompleted,
+                        CreditsAdded = 0,
+                        PackageName = "Dış Ticaret Sertifika Programı",
+                        UserId = 0,
+                        MembershipEnd = null
+                    };
+                }
+                return new PaymentVerificationResult { Success = false, ErrorMessage = "Eğitim kaydı bulunamadı" };
+            }
 
             var existing = await _dbContext.PaymentHistories
                 .Where(p => p.OrderId == merchantPaymentId && p.Status == "SUCCESS")
@@ -731,8 +756,6 @@ public class ParatikaPaymentService : IParatikaPaymentService
                 Amount            = query.Amount,
                 InstallmentCount  = query.InstallmentCount,
                 CardPanMasked     = query.CardPanMasked,
-                // Not: verify senaryosunda cardToken gelmiyor, recurring kurulmayacak
-                // Kullanıcı bir sonraki girişte bilgilendirilmeli
             };
 
             var result = await ProcessCallbackAsync(fakeCallback);
@@ -760,7 +783,6 @@ public class ParatikaPaymentService : IParatikaPaymentService
             return new PaymentVerificationResult { Success = false, ErrorMessage = ex.Message };
         }
     }
-
     public List<FgsTradePackage> GetAvailablePackages() => _packages;
 
     // ═════════════════════════════════════════════════════════════════════════
