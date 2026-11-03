@@ -395,6 +395,16 @@ public class ParatikaPaymentService : IParatikaPaymentService
         _logger.LogInformation("🔔 Paratika Callback Başladı | PayId={Id} | Code={Code}", 
             callback.MerchantPaymentId, callback.ResponseCode);
 
+        // 0. EĞİTİM ÖDEMESİ: Paratika hash'i CUSTOMER değeriyle (= kayıttaki e-posta) hesaplıyor,
+        // ama callback'te customerId dönmüyor. Hash'in tutması için e-postayı kayıttan geri yükle.
+        if (callback.MerchantPaymentId?.StartsWith("TRG-") == true && string.IsNullOrEmpty(callback.CustomerId))
+        {
+            callback.CustomerId = await _dbContext.TrainingRegistrations
+                .Where(r => r.RegistrationCode == callback.MerchantPaymentId)
+                .Select(r => r.Email)
+                .FirstOrDefaultAsync();
+        }
+
         // 1. GÜVENLİK ADIMI: Hash Doğrulaması (VerifyCallbackHash metodunu güncellediğini varsayıyoruz)
         // Eğer bu adım fail verirse, ödeme bankadan onaylansa bile biz işlemeyiz.
         if (!string.IsNullOrEmpty(_merchantSecretKey) && !VerifyCallbackHash(callback))
@@ -417,7 +427,13 @@ public class ParatikaPaymentService : IParatikaPaymentService
         // 1b. EĞİTİM ÖDEMESİ: kredi/abonelik işlemi yok, durumu controller günceller
         if (callback.MerchantPaymentId?.StartsWith("TRG-") == true)
         {
-            var trainingOk = callback.ResponseCode == "00";
+            // Eğitimde imza ZORUNLU: secret yoksa, hash gelmediyse ya da tutmuyorsa ödeme sayılmaz
+            // (hash yokken geçen genel akış burada kabul edilmez; yoksa herkes sahte callback ile ücretsiz kayıt yapabilir)
+            var hashOk = !string.IsNullOrEmpty(_merchantSecretKey)
+                      && !string.IsNullOrEmpty(callback.SdSha512)
+                      && !string.IsNullOrEmpty(callback.Random)
+                      && VerifyCallbackHash(callback);
+            var trainingOk = hashOk && callback.ResponseCode == "00";
             _logger.LogInformation("🎓 Eğitim callback | PayId={Id} | Code={Code}", callback.MerchantPaymentId, callback.ResponseCode);
             return new ParatikaCallbackResult
             {
@@ -1171,7 +1187,7 @@ private bool VerifyCallbackHash(ParatikaCallbackDto cb)
     var computedHash = Convert.ToHexString(hashBytes).ToUpperInvariant();
     var incomingHash = (cb.SdSha512 ?? "").ToUpperInvariant();
 
-    _logger.LogInformation("🔍 HASH DETAY | Raw: {Raw}", raw);
+    _logger.LogInformation("🔍 HASH DETAY | Raw: {Raw}", string.IsNullOrEmpty(_merchantSecretKey) ? raw : raw.Replace(_merchantSecretKey, "****"));
     _logger.LogInformation("🔍 HASH KONTROL | Hesaplanan: {CH} | Gelen: {GH}", computedHash, incomingHash);
 
     // Başarısız işlemlerde banka hatasını görmek için hash bypass edilebilir

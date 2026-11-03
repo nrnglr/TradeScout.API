@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using TradeScout.API.Services;
+using TradeScout.API.Data;
 
 namespace TradeScout.API.Controllers;
 
@@ -11,16 +12,22 @@ public class ParatikaPaymentController : ControllerBase
 {
     private readonly IParatikaPaymentService            _paymentService;
     private readonly ILogger<ParatikaPaymentController> _logger;
+    private readonly ApplicationDbContext               _db;
+    private readonly IEmailService                      _email;
 
     private static readonly string FrontendBaseUrl =
         Environment.GetEnvironmentVariable("FRONTEND_URL") ?? "https://fgstrade.com";
 
     public ParatikaPaymentController(
         IParatikaPaymentService paymentService,
-        ILogger<ParatikaPaymentController> logger)
+        ILogger<ParatikaPaymentController> logger,
+        ApplicationDbContext db,
+        IEmailService email)
     {
         _paymentService = paymentService;
         _logger         = logger;
+        _db             = db;
+        _email          = email;
     }
 
     // ─── GET /api/payment/paratika/packages ──────────────────────────────────
@@ -90,23 +97,30 @@ public async Task<IActionResult> Callback([FromForm] IFormCollection form)
             CardPanMasked     = form["cardPanMasked"],
             PaymentSystem     = form["paymentSystem"],
             Random            = form["random"],
-            SdSha512          = form["sdSha512"],
+            SdSha512          = incomingHash,
             CustomData        = form["customData"],
         };
 
        var result = await _paymentService.ProcessCallbackAsync(callback);
 
+    // 🎓 Eğitim ödemesi (TRG-): kaydı güncelle ve mailleri at
+    if (callback.MerchantPaymentId?.StartsWith("TRG-") == true)
+        await TrainingPaymentHandler.CompleteAsync(_db, _email, _logger, callback.MerchantPaymentId, result.Success);
+
+    // Form'dan gelen değeri URL'ye koymadan önce encode et (JS enjeksiyonunu engeller)
+    var safeOrderId = Uri.EscapeDataString(callback.MerchantPaymentId ?? "");
+
     // EĞER HASH HATASI VARSA BİLE FRONTEND'E YÖNLENDİR Kİ KULLANICI EKRANDA KILITLI KALMASIN
     string frontendUrl;
     if (result.Success)
     {
-        frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={callback.MerchantPaymentId}&gateway=paratika";
+        frontendUrl = $"{FrontendBaseUrl}/payment/success?orderId={safeOrderId}&gateway=paratika";
     }
     else
     {
         _logger.LogError("Ödeme başarısız veya Hash hatalı: {Msg}", result.ErrorMessage);
         var errorCode = Uri.EscapeDataString(result.BankErrorCode ?? "HASH_ERROR");
-        frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={callback.MerchantPaymentId}&errorCode={errorCode}&gateway=paratika";
+        frontendUrl = $"{FrontendBaseUrl}/payment/failed?orderId={safeOrderId}&errorCode={errorCode}&gateway=paratika";
     }
 
     // Paratika POST Callback attığı için HTTP 302 Redirect bazen tarayıcıda sorun yaratabilir.
